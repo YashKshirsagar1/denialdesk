@@ -1,9 +1,10 @@
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.models.case import AuditEvent, Case, CaseState
+from denialdesk.models.case import AuditEvent, Batch, Case, CaseState
 
 
 class CaseRepository:
@@ -59,3 +60,59 @@ class CaseRepository:
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def create_batch(
+        self,
+        practice_id: int,
+        source_format: str,
+        filename: str,
+    ) -> Batch:
+        batch = Batch(
+            practice_id=practice_id,
+            uploaded_at=datetime.now(timezone.utc),
+            source_files=filename,
+        )
+        self._session.add(batch)
+        await self._session.flush()
+        await self._session.refresh(batch)
+        return batch
+
+    async def create_case_from_record(
+        self,
+        batch_id: int,
+        record,  # ClaimRecord — avoid circular import by using duck typing
+    ) -> tuple[Case, AuditEvent]:
+        """Create a Case in 'ingested' state with an audit event."""
+        case = Case(
+            batch_id=batch_id,
+            payer=record.payer,
+            patient_ref=record.patient_ref,
+            dos=datetime(record.dos.year, record.dos.month, record.dos.day, tzinfo=timezone.utc),
+            cpt_hcpcs=record.cpt,
+            icd10=",".join(record.icd10),
+            billed_amt=float(record.billed_amt),
+            allowed_amt=float(record.allowed_amt),
+            carc=record.carc,
+            rarc=record.rarc,
+            denial_date=datetime(
+                record.denial_date.year,
+                record.denial_date.month,
+                record.denial_date.day,
+                tzinfo=timezone.utc,
+            ),
+            state=CaseState.ingested,
+        )
+        self._session.add(case)
+        await self._session.flush()
+
+        event = AuditEvent(
+            case_id=case.id,
+            actor="ingestion_pipeline",
+            action=f"ingested from {record.source_format}",
+            timestamp=datetime.now(timezone.utc),
+        )
+        self._session.add(event)
+        await self._session.flush()
+        await self._session.refresh(case)
+        await self._session.refresh(event)
+        return case, event

@@ -282,6 +282,80 @@ def generate_playbook() -> list[dict]:
 # CLI
 # ---------------------------------------------------------------------------
 
+def generate_sample_csv(cases: list[dict], output_dir: str) -> str:
+    import csv as _csv
+    path = os.path.join(output_dir, "sample_claims.csv")
+    fieldnames = [
+        "claim_number", "patient_ref", "dos", "cpt", "icd10",
+        "billed_amt", "allowed_amt", "payer", "carc", "rarc", "denial_date",
+    ]
+    with open(path, "w", newline="") as f:
+        writer = _csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for i, c in enumerate(cases):
+            dos_str = c["dos"][:10] if "T" in c["dos"] else c["dos"]
+            denial_str = c["denial_date"][:10] if "T" in c["denial_date"] else c["denial_date"]
+            writer.writerow({
+                "claim_number": c["id"],
+                "patient_ref": c["patient_ref"],
+                "dos": dos_str,
+                "cpt": c["cpt_hcpcs"],
+                "icd10": c["icd10"],
+                "billed_amt": c["billed_amt"],
+                "allowed_amt": c["allowed_amt"],
+                "payer": c["payer"],
+                "carc": c["carc"],
+                "rarc": c["rarc"],
+                "denial_date": denial_str,
+            })
+    return path
+
+
+def generate_sample_x12_835(cases: list[dict], output_dir: str) -> str:
+    """Generate a minimal valid X12 835 EDI file for the first 5 cases."""
+    path = os.path.join(output_dir, "sample_claims.835")
+    subset = cases[:5]
+
+    lines = []
+    # ISA envelope (hardcoded boilerplate)
+    lines.append("ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *261014*1200*^*00501*000000001*0*T*:")
+    lines.append("GS*HP*SENDER*RECEIVER*20261014*1200*1*X*005010X221A1")
+    lines.append("ST*835*0001")
+    lines.append("BPR*I*0*C*NON************20261014")
+    lines.append("TRN*1*CHECK12345*1234567890")
+    lines.append("DTM*405*20261014")
+    # Payer name
+    payer_name = subset[0]["payer"] if subset else "BlueCross BlueShield of California"
+    lines.append(f"NM1*PR*2*{payer_name}*****PI*12345")
+    lines.append("NM1*PE*2*RIVERSIDE INTERNAL MEDICINE*****XX*1234567890")
+
+    for c in subset:
+        dos_str = c["dos"][:10].replace("-", "")
+        denial_str = c["denial_date"][:10].replace("-", "")
+        billed = c["billed_amt"]
+        paid = c["allowed_amt"]
+        patient_ref = c["patient_ref"]
+        claim_num = c["id"]
+        carc = c["carc"]
+        cpt = c["cpt_hcpcs"]
+
+        lines.append(f"CLP*{claim_num}*4*{billed:.2f}*{paid:.2f}*0*MC*{patient_ref}*11*1")
+        lines.append(f"NM1*QC*1*DOE*JOHN****MI*{patient_ref}")
+        lines.append(f"CAS*CO*{carc}*{billed:.2f}")
+        lines.append(f"DTM*232*{dos_str}")
+        lines.append(f"DTM*405*{denial_str}")
+        lines.append(f"SVC*HC:{cpt}*{billed:.2f}*{paid:.2f}**1")
+
+    lines.append(f"SE*{len(lines) + 1}*0001")
+    lines.append("GE*1*1")
+    lines.append("IEA*1*000000001")
+
+    with open(path, "w") as f:
+        f.write("~\n".join(lines) + "~\n")
+
+    return path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate synthetic denial data")
     parser.add_argument("--count", type=int, default=20, help="Number of cases to generate")
@@ -305,9 +379,14 @@ def main() -> None:
     with open(playbook_path, "w") as f:
         json.dump({"generated_at": generated_at, "count": len(playbook), "playbook": playbook}, f, indent=2)
 
+    csv_path = generate_sample_csv(cases, args.output)
+    x12_path = generate_sample_x12_835(cases, args.output)
+
     # Summary table
     print(f"\nGenerated {len(cases)} cases → {cases_path}")
-    print(f"Generated {len(playbook)} playbook entries → {playbook_path}\n")
+    print(f"Generated {len(playbook)} playbook entries → {playbook_path}")
+    print(f"Generated sample CSV → {csv_path}")
+    print(f"Generated sample X12 835 → {x12_path}\n")
 
     carc_counts: dict[str, int] = {}
     winnable = 0
