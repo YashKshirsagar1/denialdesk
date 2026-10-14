@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Optional
 
@@ -6,12 +7,32 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.api.deps import get_session, require_role
+from denialdesk.api.deps import get_session, require_auth, require_role
 from denialdesk.api.schemas.case import ClinicDashboard
 from denialdesk.auth.models import Role, UserClaims
-from denialdesk.models.case import AccessLog, Case, CaseState, Outcome
+from denialdesk.models.case import AccessLog, Case, CaseState, OnboardingStatus, Outcome, PayerPortalAccess, Practice
 
 router = APIRouter(prefix="/clinic", tags=["clinic"])
+
+
+class OnboardingChecklist(BaseModel):
+    baa_signed: bool
+    service_agreement_signed: bool
+    practice_details: bool
+    specialties: bool
+    payers_billed: bool
+    payer_portal_access: bool
+
+
+class OnboardingStatusOut(BaseModel):
+    practice_id: int
+    name: str
+    onboarding_status: str
+    baa_signed: bool
+    service_agreement_signed: bool
+    details_complete: bool
+    checklist: OnboardingChecklist
+
 
 class AccessLogEntry(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -111,4 +132,52 @@ async def get_clinic_dashboard(
         cases_paid=cases_paid,
         cases_declined=cases_declined,
         total_cases=total_cases,
+    )
+
+
+@router.get("/onboarding", response_model=OnboardingStatusOut)
+async def get_onboarding_status(
+    session: AsyncSession = Depends(get_session),
+    user: UserClaims = Depends(require_auth),
+):
+    """Return onboarding checklist for the caller's clinic.
+
+    Clinic roles see their own practice. Ops can call without a tenant — returns 400.
+    """
+    if user.tenant_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="This endpoint requires a tenant-scoped token.",
+        )
+    practice = await session.get(Practice, user.tenant_id)
+    if practice is None:
+        raise HTTPException(status_code=404, detail="Practice not found")
+
+    # Check payer portal access
+    portal_result = await session.execute(
+        select(PayerPortalAccess.id).where(PayerPortalAccess.practice_id == practice.id).limit(1)
+    )
+    has_portal = portal_result.scalar_one_or_none() is not None
+
+    specialties_ok = bool(practice.specialties and json.loads(practice.specialties or "[]"))
+    payers_ok = bool(practice.payers_billed and json.loads(practice.payers_billed or "[]"))
+    details_ok = bool(practice.address and practice.phone and practice.npi)
+
+    checklist = OnboardingChecklist(
+        baa_signed=practice.baa_signed_at is not None,
+        service_agreement_signed=practice.service_agreement_signed_at is not None,
+        practice_details=details_ok,
+        specialties=specialties_ok,
+        payers_billed=payers_ok,
+        payer_portal_access=has_portal,
+    )
+
+    return OnboardingStatusOut(
+        practice_id=practice.id,
+        name=practice.name,
+        onboarding_status=practice.onboarding_status,
+        baa_signed=practice.baa_signed_at is not None,
+        service_agreement_signed=practice.service_agreement_signed_at is not None,
+        details_complete=details_ok,
+        checklist=checklist,
     )

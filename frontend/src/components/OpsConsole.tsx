@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCaseDetail, getDeadlines, getQueueCases } from '../api'
+import { activatePractice, getCaseDetail, getDeadlines, getQueueCases, listPractices, signBaa, signServiceAgreement, suspendPractice } from '../api'
 import { clearToken } from '../auth'
 import { CaseDetailPanel } from './CaseDetail'
 import { Dashboard } from './Dashboard'
@@ -9,9 +9,9 @@ import { OutcomeForm } from './OutcomeForm'
 import { QueueSidebar } from './QueueSidebar'
 import { ReviewPanel } from './ReviewPanel'
 import { UploadForm } from './UploadForm'
-import type { CaseDetail, CaseSummary, DeadlineItem, DraftInfo } from '../types'
+import type { CaseDetail, CaseSummary, DeadlineItem, DraftInfo, PracticeOut } from '../types'
 
-type Tab = 'upload' | 'queue' | 'deadlines' | 'dashboard'
+type Tab = 'upload' | 'queue' | 'deadlines' | 'dashboard' | 'practices'
 
 const tabBtn = (active: boolean): React.CSSProperties => ({
   padding: '8px 20px',
@@ -32,6 +32,7 @@ export function OpsConsole({ onLogout }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('upload')
   const [cases, setCases] = useState<CaseSummary[]>([])
   const [deadlines, setDeadlines] = useState<DeadlineItem[]>([])
+  const [practices, setPractices] = useState<PracticeOut[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [detail, setDetail] = useState<CaseDetail | null>(null)
   const [editedContent, setEditedContent] = useState('')
@@ -56,9 +57,28 @@ export function OpsConsole({ onLogout }: Props) {
     }
   }
 
+  async function loadPractices() {
+    try {
+      const data = await listPractices()
+      setPractices(data)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  async function handlePracticeAction(action: () => Promise<PracticeOut>) {
+    try {
+      const updated = await action()
+      setPractices(prev => prev.map(p => p.id === updated.id ? updated : p))
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
   useEffect(() => {
     loadQueue()
     loadDeadlines()
+    loadPractices()
   }, [])
 
   async function selectCase(id: number) {
@@ -109,6 +129,7 @@ export function OpsConsole({ onLogout }: Props) {
           })()}
         </button>
         <button style={tabBtn(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
+        <button style={tabBtn(activeTab === 'practices')} onClick={() => setActiveTab('practices')}>Practices</button>
         <div style={{ marginLeft: 'auto' }}>
           <button
             onClick={onLogout}
@@ -130,6 +151,60 @@ export function OpsConsole({ onLogout }: Props) {
       ) : activeTab === 'deadlines' ? (
         <div style={{ flex: 1, overflowY: 'auto', background: '#f8f9fa' }}>
           <DeadlineView deadlines={deadlines} />
+        </div>
+      ) : activeTab === 'practices' ? (
+        <div style={{ flex: 1, overflowY: 'auto', background: '#f8f9fa', padding: 24 }}>
+          <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>Practices</h2>
+          {practices.length === 0 && <div style={{ color: '#6c757d' }}>No practices yet.</div>}
+          {practices.length > 0 && (
+            <div style={{ background: '#fff', border: '1px solid #dee2e6', borderRadius: 8, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #dee2e6' }}>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', color: '#6c757d', fontWeight: 600, fontSize: 12 }}>Name</th>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', color: '#6c757d', fontWeight: 600, fontSize: 12 }}>Specialty</th>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', color: '#6c757d', fontWeight: 600, fontSize: 12 }}>Status</th>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', color: '#6c757d', fontWeight: 600, fontSize: 12 }}>BAA</th>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', color: '#6c757d', fontWeight: 600, fontSize: 12 }}>SA</th>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', color: '#6c757d', fontWeight: 600, fontSize: 12 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {practices.map((p, i) => (
+                    <tr key={p.id} style={{ borderBottom: '1px solid #dee2e6', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                      <td style={{ padding: '10px 14px', fontWeight: 500 }}>{p.name}</td>
+                      <td style={{ padding: '10px 14px', color: '#6c757d' }}>{p.specialty}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{
+                          background: p.onboarding_status === 'active' ? '#d1e7dd' : p.onboarding_status === 'suspended' ? '#f8d7da' : '#fff3cd',
+                          color: p.onboarding_status === 'active' ? '#0a3622' : p.onboarding_status === 'suspended' ? '#58151c' : '#856404',
+                          borderRadius: 4, fontSize: 11, padding: '2px 8px', fontWeight: 600,
+                        }}>
+                          {p.onboarding_status.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 14px' }}>{p.baa_signed ? '✅' : '—'}</td>
+                      <td style={{ padding: '10px 14px' }}>{p.service_agreement_signed ? '✅' : '—'}</td>
+                      <td style={{ padding: '10px 14px', display: 'flex', gap: 6 }}>
+                        {!p.baa_signed && (
+                          <button onClick={() => handlePracticeAction(() => signBaa(p.id))} style={{ fontSize: 11, padding: '3px 8px', cursor: 'pointer', border: '1px solid #ced4da', borderRadius: 3, background: '#fff' }}>Sign BAA</button>
+                        )}
+                        {!p.service_agreement_signed && (
+                          <button onClick={() => handlePracticeAction(() => signServiceAgreement(p.id))} style={{ fontSize: 11, padding: '3px 8px', cursor: 'pointer', border: '1px solid #ced4da', borderRadius: 3, background: '#fff' }}>Sign SA</button>
+                        )}
+                        {p.onboarding_status !== 'active' && p.onboarding_status !== 'suspended' && (
+                          <button onClick={() => handlePracticeAction(() => activatePractice(p.id))} style={{ fontSize: 11, padding: '3px 8px', cursor: 'pointer', border: '1px solid #198754', borderRadius: 3, background: '#d1e7dd', color: '#0a3622' }}>Activate</button>
+                        )}
+                        {p.onboarding_status !== 'suspended' && (
+                          <button onClick={() => handlePracticeAction(() => suspendPractice(p.id))} style={{ fontSize: 11, padding: '3px 8px', cursor: 'pointer', border: '1px solid #dc3545', borderRadius: 3, background: '#f8d7da', color: '#58151c' }}>Suspend</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>

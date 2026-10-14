@@ -102,3 +102,30 @@ def require_tenant_context(
     if tenant is None:
         raise HTTPException(status_code=401, detail="X-Tenant-ID header is required")
     return tenant
+
+
+async def require_active_practice(
+    user: UserClaims = Depends(require_auth),
+    session: AsyncSession = Depends(get_session),
+):
+    """Raises 403 if the clinic's practice is not in 'active' onboarding_status.
+
+    Ops roles bypass this check (they are not bound to a single practice).
+    Clinic users cannot upload until BAA + SA are signed by an ops admin.
+    """
+    from denialdesk.models.case import OnboardingStatus, Practice  # local import to avoid circular
+
+    if user.is_ops:
+        return None
+    if user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="No practice associated with this account")
+    practice = await session.get(Practice, user.tenant_id)
+    if practice is None:
+        raise HTTPException(status_code=403, detail="Practice not found")
+    if practice.onboarding_status != OnboardingStatus.active.value:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Account not yet active. Onboarding status: {practice.onboarding_status}. "
+                   "Please complete the onboarding process.",
+        )
+    return practice

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from denialdesk.api.middleware.access_log import AccessLogMiddleware
-from denialdesk.api.routers import auth, cases, clinic, document_requests, kpis, ops, outcomes, queue, reviews, upload
+from denialdesk.api.routers import auth, cases, clinic, document_requests, kpis, onboarding, ops, outcomes, queue, reviews, upload
 from denialdesk.logging import configure_phi_safe_logging
 
 configure_phi_safe_logging()
@@ -27,6 +27,7 @@ app.include_router(kpis.router, prefix="/api")
 app.include_router(clinic.router, prefix="/api")
 app.include_router(document_requests.router, prefix="/api")
 app.include_router(ops.router, prefix="/api")
+app.include_router(onboarding.router, prefix="/api")
 
 # Serve frontend build at / (enable after frontend is built)
 # app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="static")

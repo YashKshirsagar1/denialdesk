@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from denialdesk.api.main import app
 from denialdesk.api import deps
 from denialdesk.auth.models import Role, UserClaims
-from denialdesk.models.case import AccessLog, AuditEvent, Base, Batch, Case, CaseState, Diagnosis, Draft, Practice
+from denialdesk.models.case import AccessLog, AuditEvent, Base, Batch, Case, CaseState, Diagnosis, Draft, OnboardingStatus, PayerPortalAccess, Practice
 
 
 @pytest.fixture(autouse=True)
@@ -77,7 +77,7 @@ async def api_client(db_session: AsyncSession):
 
 
 async def seed_case(session: AsyncSession, state: CaseState = CaseState.ingested) -> Case:
-    practice = Practice(name="Test Practice", specialty="Internal Medicine")
+    practice = Practice(name="Test Practice", specialty="Internal Medicine", onboarding_status="active")
     session.add(practice)
     await session.flush()
 

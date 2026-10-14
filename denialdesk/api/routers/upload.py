@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.api.deps import get_session, require_role
+from denialdesk.api.deps import get_session, require_active_practice, require_role
 from denialdesk.auth.models import Role, UserClaims
 from denialdesk.coordinator import Coordinator
 from denialdesk.ingestion.base import IngestorError
@@ -55,6 +55,7 @@ async def upload_file(
     practice_id: int = Form(1),
     session: AsyncSession = Depends(get_session),
     _user: UserClaims = Depends(_upload_roles),
+    _practice_active=Depends(require_active_practice),
 ) -> UploadResponse:
     practice = await session.get(Practice, practice_id)
     if practice is None:
@@ -84,6 +85,7 @@ async def process_batch(
     batch_id: int,
     session: AsyncSession = Depends(get_session),
     _user: UserClaims = Depends(_upload_roles),
+    _practice_active=Depends(require_active_practice),
 ) -> ProcessResponse:
     llm = get_llm_provider()
     coordinator = Coordinator(session, llm)

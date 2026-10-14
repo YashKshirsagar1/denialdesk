@@ -51,6 +51,13 @@ class TimestampMixin:
     )
 
 
+class OnboardingStatus(str, enum.Enum):
+    pending_agreements = "pending_agreements"
+    pending_details    = "pending_details"
+    active             = "active"
+    suspended          = "suspended"
+
+
 class Practice(TimestampMixin, Base):
     __tablename__ = "practices"
 
@@ -59,7 +66,44 @@ class Practice(TimestampMixin, Base):
     specialty: Mapped[str] = mapped_column(String(100), nullable=False)
     contact: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Onboarding fields (Phase 2 step 8)
+    onboarding_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default=OnboardingStatus.pending_agreements.value
+    )
+    baa_signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    baa_signed_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    service_agreement_signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    service_agreement_signed_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    address: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    npi: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    specialties: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # JSON array
+    payers_billed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON array
+
     batches: Mapped[list["Batch"]] = relationship("Batch", back_populates="practice", foreign_keys="Batch.practice_id")
+    payer_portal_accesses: Mapped[list["PayerPortalAccess"]] = relationship(
+        "PayerPortalAccess", back_populates="practice"
+    )
+
+
+class PayerPortalAccess(Base):
+    """Records which payer portals our staff have delegated access to.
+
+    NEVER store passwords here. Production secrets go in the secrets manager.
+    This table records WHICH portals we have access to, not credentials.
+    """
+    __tablename__ = "payer_portal_access"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    practice_id: Mapped[int] = mapped_column(ForeignKey("practices.id"), nullable=False, index=True)
+    payer: Mapped[str] = mapped_column(String(100), nullable=False)
+    portal_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    our_username: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    practice: Mapped["Practice"] = relationship("Practice", back_populates="payer_portal_accesses")
 
 
 class Batch(TimestampMixin, Base):

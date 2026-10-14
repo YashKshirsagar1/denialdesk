@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { getAllCases, getClinicDashboard, getCaseDetail, getDocumentRequests, fulfillDocumentRequest, getAccessLog } from '../api'
+import { getAllCases, getClinicDashboard, getCaseDetail, getDocumentRequests, fulfillDocumentRequest, getAccessLog, getOnboardingStatus } from '../api'
 import { clearToken, getCurrentUser } from '../auth'
 import { formatCaseStatus, statusColor } from '../lib/caseStatus'
 import { UploadForm } from './UploadForm'
-import type { ClinicCaseSummary, ClinicDashboard, CaseDetail, DocumentRequest, AccessLogEntry } from '../types'
+import type { ClinicCaseSummary, ClinicDashboard, CaseDetail, DocumentRequest, AccessLogEntry, OnboardingStatus } from '../types'
 
 type Tab = 'upload' | 'claims' | 'dashboard' | 'requests' | 'access-log'
 
@@ -41,10 +41,51 @@ interface Props {
   onLogout: () => void
 }
 
+function OnboardingGate({ status, onLogout }: { status: OnboardingStatus; onLogout: () => void }) {
+  const items: { key: keyof OnboardingStatus['checklist']; label: string }[] = [
+    { key: 'baa_signed', label: 'BAA signed' },
+    { key: 'service_agreement_signed', label: 'Service agreement signed' },
+    { key: 'practice_details', label: 'Practice details complete' },
+    { key: 'specialties', label: 'Specialties added' },
+    { key: 'payers_billed', label: 'Payers added' },
+    { key: 'payer_portal_access', label: 'Payer portal access granted' },
+  ]
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'system-ui, sans-serif', fontSize: 14, color: '#212529' }}>
+      <div style={{ borderBottom: '1px solid #dee2e6', padding: '0 16px', display: 'flex', alignItems: 'center', background: '#fff', height: 48 }}>
+        <span style={{ fontWeight: 700, fontSize: 15, color: '#212529' }}>DenialDesk</span>
+        <div style={{ marginLeft: 'auto' }}>
+          <button onClick={onLogout} style={{ padding: '4px 12px', fontSize: 12, background: 'none', border: '1px solid #dee2e6', borderRadius: 4, cursor: 'pointer', color: '#6c757d' }}>
+            Sign out
+          </button>
+        </div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fa' }}>
+        <div style={{ background: '#fff', border: '1px solid #dee2e6', borderRadius: 10, padding: '36px 44px', maxWidth: 440, width: '100%' }}>
+          <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>Welcome to DenialDesk</h2>
+          <p style={{ margin: '0 0 24px', color: '#6c757d', fontSize: 14 }}>Your account is pending activation.</p>
+          <div style={{ fontWeight: 600, fontSize: 13, color: '#495057', marginBottom: 14 }}>Onboarding checklist</div>
+          {items.map(({ key, label }) => (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <span style={{ fontSize: 18 }}>{status.checklist[key] ? '✅' : '⬜'}</span>
+              <span style={{ fontSize: 14, color: status.checklist[key] ? '#212529' : '#6c757d' }}>{label}</span>
+            </div>
+          ))}
+          <p style={{ marginTop: 24, marginBottom: 0, fontSize: 13, color: '#6c757d' }}>
+            Please contact your DenialDesk representative to complete activation.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ClinicPortal({ onLogout }: Props) {
   const currentUser = getCurrentUser()
   const isAdmin = currentUser?.role === 'clinic_admin'
 
+  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null)
+  const [onboardingLoading, setOnboardingLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('claims')
   const [cases, setCases] = useState<ClinicCaseSummary[]>([])
   const [dashboard, setDashboard] = useState<ClinicDashboard | null>(null)
@@ -113,6 +154,10 @@ export function ClinicPortal({ onLogout }: Props) {
   }
 
   useEffect(() => {
+    getOnboardingStatus()
+      .then(setOnboardingStatus)
+      .catch(() => setOnboardingStatus(null))
+      .finally(() => setOnboardingLoading(false))
     loadCases()
   }, [])
 
@@ -161,6 +206,11 @@ export function ClinicPortal({ onLogout }: Props) {
   }
 
   const pendingReqs = docRequests.filter(r => r.status === 'pending').length
+
+  // Show onboarding gate if account is not active yet
+  if (!onboardingLoading && onboardingStatus && onboardingStatus.onboarding_status !== 'active') {
+    return <OnboardingGate status={onboardingStatus} onLogout={onLogout} />
+  }
 
   const recoveryRate = dashboard
     ? dashboard.dollars_submitted > 0

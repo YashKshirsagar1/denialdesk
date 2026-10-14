@@ -175,3 +175,37 @@ export interface AccessLogEntry {
   path: string;
   timestamp: string;
 }
+
+export interface OnboardingChecklist {
+  baa_signed: boolean;
+  service_agreement_signed: boolean;
+  practice_details: boolean;
+  specialties: boolean;
+  payers_billed: boolean;
+  payer_portal_access: boolean;
+}
+
+export interface OnboardingStatus {
+  practice_id: number;
+  name: string;
+  onboarding_status: string;
+  baa_signed: boolean;
+  service_agreement_signed: boolean;
+  details_complete: boolean;
+  checklist: OnboardingChecklist;
+}
+
+export interface PracticeOut {
+  id: number;
+  name: string;
+  specialty: string;
+  contact: string | null;
+  onboarding_status: string;
+  baa_signed: boolean;
+  service_agreement_signed: boolean;
+  address: string | null;
+  phone: string | null;
+  npi: string | null;
+  specialties: string[] | null;
+  payers_billed: string[] | null;
+}

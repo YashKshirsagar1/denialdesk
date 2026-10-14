@@ -96,6 +96,7 @@ def seed(db_path: str, count: int) -> None:
                     name=pname,
                     specialty=raw["practice"]["specialty"],
                     contact=raw["practice"].get("contact"),
+                    onboarding_status="active",  # dev seed: skip onboarding gate
                 )
                 session.add(p)
                 session.flush()

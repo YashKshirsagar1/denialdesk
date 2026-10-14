@@ -1,5 +1,5 @@
 import { authHeaders } from './auth'
-import type { AccessLogEntry, CaseDetail, ClinicCaseSummary, ClinicDashboard, CaseSummary, DeadlineItem, DocumentRequest, OverviewKPIs, PipelineView, ReviewRequest, ReviewResponse, ScoreAccuracy, WinRateTable } from './types'
+import type { AccessLogEntry, CaseDetail, ClinicCaseSummary, ClinicDashboard, CaseSummary, DeadlineItem, DocumentRequest, OnboardingStatus, PracticeOut, OverviewKPIs, PipelineView, ReviewRequest, ReviewResponse, ScoreAccuracy, WinRateTable } from './types'
 
 const BASE = '/api'
 
@@ -65,6 +65,37 @@ export function getDocumentRequests(): Promise<DocumentRequest[]> {
 export function getAccessLog(tenantId?: number): Promise<AccessLogEntry[]> {
   const params = tenantId !== undefined ? `?tenant_id=${tenantId}` : ''
   return apiFetch<AccessLogEntry[]>(`/clinic/access-log${params}`)
+}
+
+export function getOnboardingStatus(): Promise<OnboardingStatus> {
+  return apiFetch<OnboardingStatus>('/clinic/onboarding')
+}
+
+export function listPractices(): Promise<PracticeOut[]> {
+  return apiFetch<PracticeOut[]>('/ops/practices')
+}
+
+export function createPractice(name: string, specialty: string, contact?: string): Promise<PracticeOut> {
+  return apiFetch<PracticeOut>('/ops/practices', {
+    method: 'POST',
+    body: JSON.stringify({ name, specialty, contact }),
+  })
+}
+
+export function signBaa(practiceId: number): Promise<PracticeOut> {
+  return apiFetch<PracticeOut>(`/ops/practices/${practiceId}/sign-baa`, { method: 'POST' })
+}
+
+export function signServiceAgreement(practiceId: number): Promise<PracticeOut> {
+  return apiFetch<PracticeOut>(`/ops/practices/${practiceId}/sign-service-agreement`, { method: 'POST' })
+}
+
+export function activatePractice(practiceId: number): Promise<PracticeOut> {
+  return apiFetch<PracticeOut>(`/ops/practices/${practiceId}/activate`, { method: 'POST' })
+}
+
+export function suspendPractice(practiceId: number): Promise<PracticeOut> {
+  return apiFetch<PracticeOut>(`/ops/practices/${practiceId}/suspend`, { method: 'POST' })
 }
 
 export function fulfillDocumentRequest(reqId: number, file?: File): Promise<DocumentRequest> {
