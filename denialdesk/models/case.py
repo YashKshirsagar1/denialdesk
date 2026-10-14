@@ -160,6 +160,13 @@ class Case(TimestampMixin, Base):
     rarc: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     denial_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     filing_deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Extended claim fields from 835 parsing
+    claim_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    modifier: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    rendering_provider_npi: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    billing_provider_tin: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    clinical_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    carc_codes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON array
     state: Mapped[CaseState] = mapped_column(
         Enum(CaseState, name="casestate"), default=CaseState.ingested, nullable=False
     )

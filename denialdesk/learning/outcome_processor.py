@@ -15,6 +15,7 @@ from denialdesk.models.case import (
     Diagnosis,
     Draft,
     Outcome,
+    Practice,
 )
 from denialdesk.repositories.case_repository import CaseRepository
 from denialdesk.repositories.playbook_repository import PlaybookRepository
@@ -97,7 +98,12 @@ class OutcomeProcessor:
     ) -> None:
         payer = case.payer
         carc = case.carc or "unknown"
+        # Look up the practice specialty so the playbook is keyed correctly
         specialty = "unknown"
+        if case.tenant_id:
+            practice = await self.session.get(Practice, case.tenant_id)
+            if practice and practice.specialty:
+                specialty = practice.specialty
 
         # Always record the attempt
         await self.playbook_repo.record_attempt(payer, carc, specialty, "", [])

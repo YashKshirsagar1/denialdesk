@@ -125,6 +125,103 @@ def test_x12_835_icd10_is_unknown():
     assert records[0].icd10 == ["unknown"]
 
 
+# ---------------------------------------------------------------------------
+# New 835 field extraction tests
+# ---------------------------------------------------------------------------
+
+_835_WITH_RARC = (
+    "ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *261014*1200*^*00501*000000001*0*T*:~"
+    "NM1*PR*2*Cigna Health*****PI*88888~"
+    "CLP*CLM-RARC*4*350.00*0.00*0*MC*PT-X*11*1~"
+    "CAS*CO*16*350.00~"
+    "DTM*232*20260201~"
+    "DTM*405*20260301~"
+    "SVC*HC:99213*350.00*0.00**1~"
+    "LQ*HE*M76~"
+    "SE*8*0001~"
+)
+
+_835_WITH_MODIFIER = (
+    "ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *261014*1200*^*00501*000000001*0*T*:~"
+    "NM1*PR*2*Aetna*****PI*11111~"
+    "CLP*CLM-MOD*4*265.00*0.00*0*MC*PT-Y*11*1~"
+    "CAS*CO*97*265.00~"
+    "DTM*232*20260210~"
+    "SVC*HC:99215:25*265.00*0.00**1~"
+    "SE*6*0001~"
+)
+
+_835_WITH_OA_GROUP = (
+    "ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *261014*1200*^*00501*000000001*0*T*:~"
+    "NM1*PR*2*Medicare*****PI*00000~"
+    "CLP*CLM-OA*4*200.00*0.00*0*MC*PT-Z*11*1~"
+    "CAS*OA*18*200.00~"
+    "DTM*232*20260301~"
+    "SVC*HC:93000*200.00*0.00**1~"
+    "SE*6*0001~"
+)
+
+_835_WITH_DOS_QUALIFIER_472 = (
+    "ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *261014*1200*^*00501*000000001*0*T*:~"
+    "NM1*PR*2*UnitedHealthcare*****PI*22222~"
+    "CLP*CLM-472*4*400.00*0.00*0*MC*PT-W*11*1~"
+    "CAS*CO*96*400.00~"
+    "DTM*472*20260115~"
+    "SVC*HC:71046*400.00*0.00**1~"
+    "SE*6*0001~"
+)
+
+_835_WITH_TIN = (
+    "ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *261014*1200*^*00501*000000001*0*T*:~"
+    "NM1*PR*2*Humana*****PI*55555~"
+    "REF*TJ*987654321~"
+    "CLP*CLM-TIN*4*125.00*0.00*0*MC*PT-V*11*1~"
+    "CAS*CO*4*125.00~"
+    "DTM*232*20260101~"
+    "SVC*HC:80053*125.00*0.00**1~"
+    "SE*7*0001~"
+)
+
+
+def test_x12_835_rarc_from_lq():
+    ingestor = X12835Ingestor()
+    records, _ = ingestor.parse(_835_WITH_RARC.encode(), "test.835")
+    assert records[0].rarc == "M76"
+
+
+def test_x12_835_modifier_from_svc():
+    ingestor = X12835Ingestor()
+    records, _ = ingestor.parse(_835_WITH_MODIFIER.encode(), "test.835")
+    assert records[0].modifier == "25"
+    assert records[0].cpt == "99215"
+
+
+def test_x12_835_oa_group_carc():
+    ingestor = X12835Ingestor()
+    records, _ = ingestor.parse(_835_WITH_OA_GROUP.encode(), "test.835")
+    assert records[0].carc == "18"
+    assert "18" in records[0].carc_codes
+
+
+def test_x12_835_dos_qualifier_472():
+    ingestor = X12835Ingestor()
+    records, _ = ingestor.parse(_835_WITH_DOS_QUALIFIER_472.encode(), "test.835")
+    assert records[0].dos == date(2026, 1, 15)
+
+
+def test_x12_835_tin_from_ref():
+    ingestor = X12835Ingestor()
+    records, _ = ingestor.parse(_835_WITH_TIN.encode(), "test.835")
+    assert records[0].billing_provider_tin == "987654321"
+
+
+def test_x12_835_carc_codes_list():
+    ingestor = X12835Ingestor()
+    records, _ = ingestor.parse(MINIMAL_835.encode(), "test.835")
+    assert isinstance(records[0].carc_codes, list)
+    assert records[0].carc in records[0].carc_codes
+
+
 async def test_pipeline_detects_csv():
     from unittest.mock import AsyncMock, patch, MagicMock
     from denialdesk.ingestion.pipeline import IngestionPipeline

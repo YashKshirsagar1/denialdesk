@@ -202,14 +202,15 @@ def seed(db_path: str) -> None:
         # ------------------------------------------------------------------
         created_cases: list[Case] = []
 
-        for (
+        for i, (
             patient_ref, payer, cpt, carc, rarc,
             dos_days_ago, denial_days_ago, billed_amt,
             decline_override, decline_rationale
-        ) in _DEMO_CASES:
+        ) in enumerate(_DEMO_CASES):
             dos = now - timedelta(days=dos_days_ago)
             denial_date = now - timedelta(days=denial_days_ago)
             filing_deadline = denial_date + timedelta(days=180)
+            claim_number = f"DEMO-ICN-{i + 1:04d}"
 
             case = Case(
                 batch_id=batch.id,
@@ -226,6 +227,7 @@ def seed(db_path: str) -> None:
                 denial_date=denial_date,
                 filing_deadline=filing_deadline,
                 state=CaseState.ingested,
+                claim_number=claim_number,
             )
             session.add(case)
             session.flush()

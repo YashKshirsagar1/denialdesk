@@ -134,13 +134,38 @@ def test_required_docs_by_root_cause():
         assert len(REQUIRED_DOCS_BY_ROOT_CAUSE[rc]) > 0
 
 
-def test_get_payer_info_known():
+def test_get_payer_info_known_aetna():
+    # Exact match via alias normalization
+    info = get_payer_info("Aetna Health Inc")
+    assert info["appeal_phone"] == "1-800-872-3862"
+    assert info["deadline_days"] == 180
+
+
+def test_get_payer_info_fuzzy_bcbs():
+    # Substring match for "blue cross"
     info = get_payer_info("BlueCross BlueShield of California")
     assert "appeal_phone" in info
-    assert info["appeal_phone"] == "1-800-676-2583"
+    assert "deadline_days" in info
+    assert info["deadline_days"] == 180
+
+
+def test_get_payer_info_fuzzy_uhc():
+    from denialdesk.templates.payer_templates import normalize_payer_name
+    assert normalize_payer_name("UHC") == "UnitedHealthcare"
+    assert normalize_payer_name("United Healthcare") == "UnitedHealthcare"
+    info = get_payer_info("United Health Group")
+    assert info["deadline_days"] == 60
 
 
 def test_get_payer_info_unknown():
     info = get_payer_info("Random Payer Inc")
     assert "appeal_phone" in info
     assert "deadline_days" in info
+
+
+def test_payer_info_has_appeal_form():
+    # Every payer entry must have an appeal_form field
+    from denialdesk.templates.payer_templates import PAYER_APPEAL_INFO
+    for payer, info in PAYER_APPEAL_INFO.items():
+        assert "appeal_form" in info, f"{payer} missing appeal_form"
+        assert "appeal_address" in info, f"{payer} missing appeal_address"

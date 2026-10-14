@@ -90,6 +90,12 @@ class CaseRepository:
         batch = await self._session.get(Batch, batch_id)
         tenant_id = batch.tenant_id if batch else None
 
+        import json as _json
+
+        carc_codes_json = None
+        if getattr(record, "carc_codes", None):
+            carc_codes_json = _json.dumps(record.carc_codes)
+
         case = Case(
             batch_id=batch_id,
             tenant_id=tenant_id,
@@ -109,6 +115,11 @@ class CaseRepository:
                 tzinfo=timezone.utc,
             ),
             state=CaseState.ingested,
+            claim_number=getattr(record, "claim_number", None) or record.patient_ref,
+            modifier=getattr(record, "modifier", None) or None,
+            rendering_provider_npi=getattr(record, "rendering_provider_npi", None) or None,
+            billing_provider_tin=getattr(record, "billing_provider_tin", None) or None,
+            carc_codes=carc_codes_json,
         )
         self._session.add(case)
         await self._session.flush()

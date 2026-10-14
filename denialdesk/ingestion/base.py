@@ -20,6 +20,12 @@ class ClaimRecord:
     claim_number: str
     source_format: str  # "csv" | "x12_835" | "pdf"
     raw: dict = field(default_factory=dict)  # original parsed data for audit
+    # Extended fields — populated by 835 parser when available
+    modifier: str = ""
+    rendering_provider_npi: str = ""
+    billing_provider_tin: str = ""
+    clinical_notes: str = ""
+    carc_codes: list = field(default_factory=list)  # all CARC codes from all CAS segments
 
 
 @dataclass

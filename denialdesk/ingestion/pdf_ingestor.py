@@ -43,7 +43,30 @@ class PdfIngestor(BaseIngestor):
         if not _HAS_PDFPLUMBER:
             raise IngestorError("pdfplumber is required for PDF ingestion. Install it with: pip install pdfplumber")
 
-        text = self._extract_text(content)
+        text, is_image_only = self._extract_text(content)
+
+        if is_image_only:
+            warning = (
+                f"{filename}: PDF appears to be image-only (no extractable text). "
+                "OCR is required. Returning placeholder record — manual review needed."
+            )
+            placeholder = ClaimRecord(
+                claim_number="unknown",
+                patient_ref="unknown",
+                dos=date.today(),
+                cpt="unknown",
+                icd10=["unknown"],
+                billed_amt=Decimal("0"),
+                allowed_amt=Decimal("0"),
+                payer="unknown",
+                carc="",
+                rarc="",
+                denial_date=date.today(),
+                source_format="pdf",
+                raw={"_parse_warning": warning, "filename": filename},
+            )
+            return [placeholder], [warning]
+
         records, errors = self._structured_parse(text)
 
         if not records:
@@ -56,14 +79,17 @@ class PdfIngestor(BaseIngestor):
 
         return records, errors
 
-    def _extract_text(self, content: bytes) -> str:
+    def _extract_text(self, content: bytes) -> tuple[str, bool]:
+        """Returns (text, is_image_only). is_image_only=True means OCR is needed."""
         try:
             parts = []
             with pdfplumber.open(io.BytesIO(content)) as pdf:
                 for page in pdf.pages:
                     page_text = page.extract_text() or ""
                     parts.append(page_text)
-            return "\n".join(parts)
+            text = "\n".join(parts)
+            is_image_only = not text.strip()
+            return text, is_image_only
         except Exception as exc:
             raise IngestorError(f"PDF extraction failed: {exc}") from exc
 
