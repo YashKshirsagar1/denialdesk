@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { getAllCases, getClinicDashboard, getCaseDetail, getDocumentRequests, fulfillDocumentRequest, getAccessLog, getOnboardingStatus } from '../api'
+import { getAllCases, getClinicDashboard, getCaseDetail, getDocumentRequests, fulfillDocumentRequest, getAccessLog, getOnboardingStatus, getClinicStatements, downloadStatementPdf } from '../api'
 import { clearToken, getCurrentUser } from '../auth'
 import { formatCaseStatus, statusColor } from '../lib/caseStatus'
 import { UploadForm } from './UploadForm'
-import type { ClinicCaseSummary, ClinicDashboard, CaseDetail, DocumentRequest, AccessLogEntry, OnboardingStatus } from '../types'
+import type { ClinicCaseSummary, ClinicDashboard, CaseDetail, DocumentRequest, AccessLogEntry, OnboardingStatus, StatementOut } from '../types'
 
-type Tab = 'upload' | 'claims' | 'dashboard' | 'requests' | 'access-log'
+type Tab = 'upload' | 'claims' | 'dashboard' | 'requests' | 'access-log' | 'statements'
 
 const tabBtn = (active: boolean): React.CSSProperties => ({
   padding: '8px 20px',
@@ -93,11 +93,13 @@ export function ClinicPortal({ onLogout }: Props) {
   const [expandedDetail, setExpandedDetail] = useState<CaseDetail | null>(null)
   const [docRequests, setDocRequests] = useState<DocumentRequest[]>([])
   const [accessLog, setAccessLog] = useState<AccessLogEntry[]>([])
+  const [statements, setStatements] = useState<StatementOut[]>([])
   const [loadingCases, setLoadingCases] = useState(false)
   const [loadingDash, setLoadingDash] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [loadingReqs, setLoadingReqs] = useState(false)
   const [loadingLog, setLoadingLog] = useState(false)
+  const [loadingStatements, setLoadingStatements] = useState(false)
   const [fulfillingId, setFulfillingId] = useState<number | null>(null)
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
   const [error, setError] = useState<string | null>(null)
@@ -174,6 +176,19 @@ export function ClinicPortal({ onLogout }: Props) {
     }
   }
 
+  async function loadStatements() {
+    setLoadingStatements(true)
+    setError(null)
+    try {
+      const data = await getClinicStatements()
+      setStatements(data)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setLoadingStatements(false)
+    }
+  }
+
   useEffect(() => {
     if (activeTab === 'dashboard' && dashboard === null) {
       loadDashboard()
@@ -183,6 +198,9 @@ export function ClinicPortal({ onLogout }: Props) {
     }
     if (activeTab === 'access-log') {
       loadAccessLog()
+    }
+    if (activeTab === 'statements') {
+      loadStatements()
     }
   }, [activeTab])
 
@@ -232,6 +250,9 @@ export function ClinicPortal({ onLogout }: Props) {
               {pendingReqs}
             </span>
           )}
+        </button>
+        <button style={tabBtn(activeTab === 'statements')} onClick={() => setActiveTab('statements')}>
+          Statements
         </button>
         {isAdmin && (
           <button style={tabBtn(activeTab === 'access-log')} onClick={() => setActiveTab('access-log')}>
@@ -526,6 +547,74 @@ export function ClinicPortal({ onLogout }: Props) {
                           </span>
                         </td>
                         <td style={{ padding: '7px 12px', color: '#6c757d', fontFamily: 'monospace', fontSize: 11 }}>{entry.path}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'statements' && (
+          <div style={{ padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 18 }}>Statements</h2>
+              <button
+                onClick={loadStatements}
+                style={{ padding: '4px 12px', fontSize: 12, background: 'none', border: '1px solid #ced4da', borderRadius: 4, cursor: 'pointer', color: '#6c757d' }}
+              >
+                Refresh
+              </button>
+            </div>
+            {loadingStatements && <div style={{ color: '#6c757d' }}>Loading...</div>}
+            {!loadingStatements && statements.length === 0 && (
+              <div style={{ color: '#6c757d', textAlign: 'center', padding: '40px 0' }}>
+                No statements generated yet.
+              </div>
+            )}
+            {!loadingStatements && statements.length > 0 && (
+              <div style={{ background: '#fff', border: '1px solid #dee2e6', borderRadius: 8, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #dee2e6' }}>
+                      <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 600, color: '#6c757d' }}>Period</th>
+                      <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 600, color: '#6c757d' }}>Total Recovered</th>
+                      <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 600, color: '#6c757d' }}>Our Fee</th>
+                      <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 600, color: '#6c757d' }}>Status</th>
+                      <th style={{ textAlign: 'center', padding: '8px 14px', fontWeight: 600, color: '#6c757d' }}>PDF</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {statements.map((s, i) => (
+                      <tr key={s.id} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                        <td style={{ padding: '8px 14px' }}>{s.period_start} – {s.period_end}</td>
+                        <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600 }}>
+                          ${s.total_recovered.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ padding: '8px 14px', textAlign: 'right', color: '#495057' }}>
+                          ${s.fee_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ padding: '8px 14px' }}>
+                          <span style={{
+                            background: s.status === 'paid' ? '#d1e7dd' : s.status === 'sent' ? '#cfe2ff' : '#f8f9fa',
+                            color: s.status === 'paid' ? '#0a3622' : s.status === 'sent' ? '#084298' : '#495057',
+                            borderRadius: 4,
+                            padding: '2px 8px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                          }}>
+                            {s.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px 14px', textAlign: 'center' }}>
+                          <button
+                            onClick={() => downloadStatementPdf(s.id)}
+                            style={{ padding: '3px 10px', fontSize: 12, background: '#0d6efd', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                          >
+                            Download
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

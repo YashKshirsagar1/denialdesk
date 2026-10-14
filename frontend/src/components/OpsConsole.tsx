@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { activatePractice, getCaseDetail, getDeadlines, getQueueCases, listPractices, signBaa, signServiceAgreement, suspendPractice } from '../api'
+import { activatePractice, downloadStatementPdf, generateStatement, getCaseDetail, getDeadlines, getOpsStatements, getQueueCases, listPractices, markStatementSent, signBaa, signServiceAgreement, suspendPractice } from '../api'
 import { clearToken } from '../auth'
 import { CaseDetailPanel } from './CaseDetail'
 import { Dashboard } from './Dashboard'
@@ -9,9 +9,9 @@ import { OutcomeForm } from './OutcomeForm'
 import { QueueSidebar } from './QueueSidebar'
 import { ReviewPanel } from './ReviewPanel'
 import { UploadForm } from './UploadForm'
-import type { CaseDetail, CaseSummary, DeadlineItem, DraftInfo, PracticeOut } from '../types'
+import type { CaseDetail, CaseSummary, DeadlineItem, DraftInfo, PracticeOut, StatementOut } from '../types'
 
-type Tab = 'upload' | 'queue' | 'deadlines' | 'dashboard' | 'practices'
+type Tab = 'upload' | 'queue' | 'deadlines' | 'dashboard' | 'practices' | 'statements'
 
 const tabBtn = (active: boolean): React.CSSProperties => ({
   padding: '8px 20px',
@@ -33,6 +33,10 @@ export function OpsConsole({ onLogout }: Props) {
   const [cases, setCases] = useState<CaseSummary[]>([])
   const [deadlines, setDeadlines] = useState<DeadlineItem[]>([])
   const [practices, setPractices] = useState<PracticeOut[]>([])
+  const [statements, setStatements] = useState<StatementOut[]>([])
+  const [genPracticeId, setGenPracticeId] = useState('')
+  const [genPeriodStart, setGenPeriodStart] = useState('')
+  const [genPeriodEnd, setGenPeriodEnd] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [detail, setDetail] = useState<CaseDetail | null>(null)
   const [editedContent, setEditedContent] = useState('')
@@ -75,10 +79,38 @@ export function OpsConsole({ onLogout }: Props) {
     }
   }
 
+  async function loadStatements() {
+    try {
+      const data = await getOpsStatements()
+      setStatements(data)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  async function handleGenerateStatement() {
+    try {
+      const stmt = await generateStatement(parseInt(genPracticeId), genPeriodStart, genPeriodEnd)
+      setStatements(prev => [stmt, ...prev])
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  async function handleMarkSent(id: number) {
+    try {
+      const updated = await markStatementSent(id)
+      setStatements(prev => prev.map(s => s.id === id ? updated : s))
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
   useEffect(() => {
     loadQueue()
     loadDeadlines()
     loadPractices()
+    loadStatements()
   }, [])
 
   async function selectCase(id: number) {
@@ -130,6 +162,7 @@ export function OpsConsole({ onLogout }: Props) {
         </button>
         <button style={tabBtn(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
         <button style={tabBtn(activeTab === 'practices')} onClick={() => setActiveTab('practices')}>Practices</button>
+        <button style={tabBtn(activeTab === 'statements')} onClick={() => setActiveTab('statements')}>Statements</button>
         <div style={{ marginLeft: 'auto' }}>
           <button
             onClick={onLogout}
@@ -267,6 +300,96 @@ export function OpsConsole({ onLogout }: Props) {
               </>
             )}
           </main>
+        </div>
+      )}
+
+      {activeTab === 'statements' && (
+        <div style={{ padding: 24 }}>
+          <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>Statements</h2>
+
+          {/* Generate form */}
+          <div style={{ background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: 8, padding: 16, marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 4 }}>Practice</div>
+              <select
+                value={genPracticeId}
+                onChange={e => setGenPracticeId(e.target.value)}
+                style={{ padding: '5px 10px', border: '1px solid #ced4da', borderRadius: 4, fontSize: 13 }}
+              >
+                <option value="">Select practice…</option>
+                {practices.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 4 }}>Period Start</div>
+              <input type="date" value={genPeriodStart} onChange={e => setGenPeriodStart(e.target.value)}
+                style={{ padding: '5px 10px', border: '1px solid #ced4da', borderRadius: 4, fontSize: 13 }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 4 }}>Period End</div>
+              <input type="date" value={genPeriodEnd} onChange={e => setGenPeriodEnd(e.target.value)}
+                style={{ padding: '5px 10px', border: '1px solid #ced4da', borderRadius: 4, fontSize: 13 }} />
+            </div>
+            <button
+              onClick={handleGenerateStatement}
+              disabled={!genPracticeId || !genPeriodStart || !genPeriodEnd}
+              style={{ padding: '6px 16px', background: '#0d6efd', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}
+            >
+              Generate
+            </button>
+          </div>
+
+          {statements.length === 0 && <div style={{ color: '#6c757d', textAlign: 'center', padding: '40px 0' }}>No statements yet.</div>}
+
+          {statements.length > 0 && (
+            <div style={{ background: '#fff', border: '1px solid #dee2e6', borderRadius: 8, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #dee2e6' }}>
+                    <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 600, color: '#6c757d' }}>Practice</th>
+                    <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 600, color: '#6c757d' }}>Period</th>
+                    <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 600, color: '#6c757d' }}>Recovered</th>
+                    <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 600, color: '#6c757d' }}>Fee</th>
+                    <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 600, color: '#6c757d' }}>Status</th>
+                    <th style={{ textAlign: 'center', padding: '8px 14px', fontWeight: 600, color: '#6c757d' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {statements.map((s, i) => (
+                    <tr key={s.id} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                      <td style={{ padding: '8px 14px' }}>{s.practice_name || `Practice ${s.practice_id}`}</td>
+                      <td style={{ padding: '8px 14px', color: '#6c757d' }}>{s.period_start} – {s.period_end}</td>
+                      <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600 }}>
+                        ${s.total_recovered.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ padding: '8px 14px', textAlign: 'right' }}>
+                        ${s.fee_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ padding: '8px 14px' }}>
+                        <span style={{
+                          background: s.status === 'paid' ? '#d1e7dd' : s.status === 'sent' ? '#cfe2ff' : '#f8f9fa',
+                          color: s.status === 'paid' ? '#0a3622' : s.status === 'sent' ? '#084298' : '#495057',
+                          borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600,
+                        }}>{s.status}</span>
+                      </td>
+                      <td style={{ padding: '8px 14px', textAlign: 'center', display: 'flex', gap: 6, justifyContent: 'center' }}>
+                        {s.status === 'draft' && (
+                          <button onClick={() => handleMarkSent(s.id)}
+                            style={{ padding: '3px 10px', fontSize: 12, background: '#198754', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+                            Mark Sent
+                          </button>
+                        )}
+                        <button onClick={() => downloadStatementPdf(s.id)}
+                          style={{ padding: '3px 10px', fontSize: 12, background: '#0d6efd', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+                          PDF
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

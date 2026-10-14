@@ -1,13 +1,16 @@
 import enum
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import ClassVar, Optional
 
 from sqlalchemy import (
+    Boolean,
+    Date,
     DateTime,
     Enum,
     Float,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
     func,
@@ -80,10 +83,16 @@ class Practice(TimestampMixin, Base):
     specialties: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # JSON array
     payers_billed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON array
 
+    # Fee configuration — configurable per clinic contract
+    fee_rate_standard: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False, default=0.2200, server_default="0.2200")
+    fee_rate_aged: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False, default=0.3200, server_default="0.3200")
+    aged_threshold_days: Mapped[int] = mapped_column(Integer, nullable=False, default=180, server_default="180")
+
     batches: Mapped[list["Batch"]] = relationship("Batch", back_populates="practice", foreign_keys="Batch.practice_id")
     payer_portal_accesses: Mapped[list["PayerPortalAccess"]] = relationship(
         "PayerPortalAccess", back_populates="practice"
     )
+    statements: Mapped[list["Statement"]] = relationship("Statement", back_populates="practice")
 
 
 class PayerPortalAccess(Base):
@@ -246,6 +255,11 @@ class Submission(TimestampMixin, Base):
     case: Mapped["Case"] = relationship("Case", back_populates="submissions")
 
 
+class VerificationMethod(str, enum.Enum):
+    payment_835          = "payment_835"        # matched a line in an 835 ERA
+    clinic_confirmation  = "clinic_confirmation" # clinic confirmed in portal
+
+
 class Outcome(TimestampMixin, Base):
     __tablename__ = "outcomes"
 
@@ -256,6 +270,12 @@ class Outcome(TimestampMixin, Base):
     amount_recovered: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     paid_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Verification fields — an outcome is billable only after verification
+    verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    verification_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    billable_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     case: Mapped["Case"] = relationship("Case", back_populates="outcome")
 
@@ -299,6 +319,38 @@ class DocumentRequest(Base):
     file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     case: Mapped["Case"] = relationship("Case", back_populates="document_requests")
+
+
+class StatementStatus(str, enum.Enum):
+    draft = "draft"
+    sent  = "sent"
+    paid  = "paid"
+
+
+class Statement(Base):
+    """Monthly recovery statement per practice.
+
+    line_items: JSON array of {case_id, patient_ref, amount_recovered, fee, rate, aged}.
+    stripe_invoice_id: set when Stripe invoice is created — never store card/bank numbers here.
+    pdf_path: local path in dev; replace with S3 key in prod.
+    """
+    __tablename__ = "statements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    practice_id: Mapped[int] = mapped_column(ForeignKey("practices.id"), nullable=False, index=True)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    total_recovered: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    fee_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default=StatementStatus.draft.value)
+    line_items: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # TODO: In production, set from Stripe invoice creation. Never store card/bank numbers.
+    stripe_invoice_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    pdf_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    practice: Mapped["Practice"] = relationship("Practice", back_populates="statements")
 
 
 class AccessLog(Base):

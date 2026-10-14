@@ -195,6 +195,21 @@ export interface OnboardingStatus {
   checklist: OnboardingChecklist;
 }
 
+export interface StatementOut {
+  id: number;
+  practice_id: number;
+  practice_name: string | null;
+  period_start: string;
+  period_end: string;
+  total_recovered: number;
+  fee_amount: number;
+  status: 'draft' | 'sent' | 'paid';
+  generated_at: string;
+  sent_at: string | null;
+  stripe_invoice_id: string | null;
+  pdf_path: string | null;
+}
+
 export interface PracticeOut {
   id: number;
   name: string;

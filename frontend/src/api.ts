@@ -1,5 +1,5 @@
 import { authHeaders } from './auth'
-import type { AccessLogEntry, CaseDetail, ClinicCaseSummary, ClinicDashboard, CaseSummary, DeadlineItem, DocumentRequest, OnboardingStatus, PracticeOut, OverviewKPIs, PipelineView, ReviewRequest, ReviewResponse, ScoreAccuracy, WinRateTable } from './types'
+import type { AccessLogEntry, CaseDetail, ClinicCaseSummary, ClinicDashboard, CaseSummary, DeadlineItem, DocumentRequest, OnboardingStatus, PracticeOut, OverviewKPIs, PipelineView, ReviewRequest, ReviewResponse, ScoreAccuracy, StatementOut, WinRateTable } from './types'
 
 const BASE = '/api'
 
@@ -96,6 +96,42 @@ export function activatePractice(practiceId: number): Promise<PracticeOut> {
 
 export function suspendPractice(practiceId: number): Promise<PracticeOut> {
   return apiFetch<PracticeOut>(`/ops/practices/${practiceId}/suspend`, { method: 'POST' })
+}
+
+export function getClinicStatements(): Promise<StatementOut[]> {
+  return apiFetch<StatementOut[]>('/clinic/statements')
+}
+
+export function getOpsStatements(): Promise<StatementOut[]> {
+  return apiFetch<StatementOut[]>('/ops/statements')
+}
+
+export function generateStatement(practiceId: number, periodStart: string, periodEnd: string): Promise<StatementOut> {
+  return apiFetch<StatementOut>('/ops/statements/generate', {
+    method: 'POST',
+    body: JSON.stringify({ practice_id: practiceId, period_start: periodStart, period_end: periodEnd }),
+  })
+}
+
+export function markStatementSent(statementId: number): Promise<StatementOut> {
+  return apiFetch<StatementOut>(`/ops/statements/${statementId}/send`, { method: 'POST' })
+}
+
+export function downloadStatementPdf(statementId: number): void {
+  const token = authHeaders().Authorization
+  const headers = token ? `&token=ignored` : ''
+  // Use window.open for file download — auth header injected via fetch below
+  fetch(`/api/statements/${statementId}/pdf`, {
+    headers: token ? { Authorization: token } : {},
+  }).then(async (res) => {
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `statement_${statementId}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
+  })
 }
 
 export function fulfillDocumentRequest(reqId: number, file?: File): Promise<DocumentRequest> {
