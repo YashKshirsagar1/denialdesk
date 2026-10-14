@@ -37,6 +37,13 @@ frontend/node_modules/
 # Screenshots (local only)
 screenshots/
 
+# Prod secrets (example file is committed; filled file is not)
+deploy/.env.prod
+
+# Backup artifacts
+*.sql.gz
+*.sql.gz.enc
+
 # IDE
 .vscode/
 .idea/

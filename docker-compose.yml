@@ -1,0 +1,19 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports: ["8000:8000"]
+    environment:
+      DATABASE_URL: "sqlite+aiosqlite:///./data/dev.db"
+      DEV_MODE: "true"
+      DEV_JWT_SECRET: "dev-secret-change-in-prod"
+    volumes:
+      - ./data:/app/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports: ["80:80"]
+    depends_on: [api]
