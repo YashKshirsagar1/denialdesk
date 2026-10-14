@@ -19,9 +19,23 @@ env/
 data/*.json
 # But eval cases are hand-authored labeled data, not PHI
 !data/eval_cases.json
+# Dev SQLite database
+data/dev.db
 
 # Alembic
 alembic/versions/*.py
+
+# Dev env overrides
+.env.dev
+
+# Frontend
+frontend/node_modules/
+
+# Playwright artifacts
+.playwright-mcp/
+
+# Screenshots (local only)
+screenshots/
 
 # IDE
 .vscode/
