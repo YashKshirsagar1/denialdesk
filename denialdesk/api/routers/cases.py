@@ -8,12 +8,55 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from denialdesk.api.deps import get_session, require_auth
-from denialdesk.api.schemas.case import CaseDetail, CaseSummary, DraftSchema
+from denialdesk.api.schemas.case import CaseDetail, ClinicCaseSummary, CaseSummary, DraftSchema
 from denialdesk.auth.models import UserClaims
 from denialdesk.export.packet_builder import PacketBuilder
 from denialdesk.models.case import Case, CaseState, Diagnosis
 
 router = APIRouter()
+
+
+@router.get("/cases", response_model=list[ClinicCaseSummary])
+async def list_cases(
+    limit: int = 100,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+    user: UserClaims = Depends(require_auth),
+):
+    """List all cases scoped to the JWT tenant. Used by the clinic portal."""
+    stmt = (
+        select(Case, Diagnosis)
+        .outerjoin(Diagnosis, Diagnosis.case_id == Case.id)
+        .order_by(Case.updated_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    tenant_ctx = user.to_tenant_context()
+    if tenant_ctx is not None:
+        stmt = stmt.where(Case.tenant_id == tenant_ctx.tenant_id)
+
+    result = await session.execute(stmt)
+    rows = result.all()
+
+    summaries = []
+    for case, diag in rows:
+        summaries.append(
+            ClinicCaseSummary(
+                id=case.id,
+                payer=case.payer or "",
+                patient_ref=case.patient_ref,
+                dos=case.dos.date() if case.dos else None,
+                cpt=case.cpt_hcpcs or "",
+                billed_amt=float(case.billed_amt or 0),
+                carc=case.carc or "",
+                denial_date=case.denial_date.date() if case.denial_date else None,
+                state=case.state.value,
+                winnability_score=diag.winnability_score if diag else None,
+                root_cause=diag.root_cause if diag else None,
+                updated_at=case.updated_at,
+            )
+        )
+    return summaries
 
 
 @router.get("/cases/{case_id}", response_model=CaseDetail)

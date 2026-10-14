@@ -1,5 +1,5 @@
 import { authHeaders } from './auth'
-import type { CaseDetail, CaseSummary, OverviewKPIs, PipelineView, ReviewRequest, ReviewResponse, ScoreAccuracy, WinRateTable } from './types'
+import type { CaseDetail, ClinicCaseSummary, ClinicDashboard, CaseSummary, OverviewKPIs, PipelineView, ReviewRequest, ReviewResponse, ScoreAccuracy, WinRateTable } from './types'
 
 const BASE = '/api'
 
@@ -44,4 +44,12 @@ export function getScoreAccuracy(): Promise<ScoreAccuracy> {
 
 export function getPipeline(): Promise<PipelineView> {
   return apiFetch<PipelineView>('/kpis/pipeline')
+}
+
+export function getAllCases(limit = 100, offset = 0): Promise<ClinicCaseSummary[]> {
+  return apiFetch<ClinicCaseSummary[]>(`/cases?limit=${limit}&offset=${offset}`)
+}
+
+export function getClinicDashboard(): Promise<ClinicDashboard> {
+  return apiFetch<ClinicDashboard>('/clinic/dashboard')
 }

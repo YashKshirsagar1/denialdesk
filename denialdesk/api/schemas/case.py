@@ -74,3 +74,31 @@ class QueueStats(BaseModel):
     paid: int
     declined: int
     total_active: int
+
+
+class ClinicCaseSummary(BaseModel):
+    """Case summary for the clinic portal — includes patient_ref, dos, updated_at."""
+
+    id: int
+    payer: str
+    patient_ref: str | None
+    dos: date | None
+    cpt: str
+    billed_amt: float
+    carc: str
+    denial_date: date | None
+    state: str
+    winnability_score: float | None
+    root_cause: str | None
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ClinicDashboard(BaseModel):
+    dollars_submitted: float
+    dollars_recovered: float
+    cases_in_progress: int
+    cases_paid: int
+    cases_declined: int
+    total_cases: int

@@ -20,3 +20,21 @@ export function authHeaders(): Record<string, string> {
 export function isLoggedIn(): boolean {
   return getToken() !== null
 }
+
+export interface JwtPayload {
+  sub: string
+  email: string
+  tenant_id: number | null
+  role: string
+}
+
+export function getCurrentUser(): JwtPayload | null {
+  const token = getToken()
+  if (!token) return null
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload as JwtPayload
+  } catch {
+    return null
+  }
+}

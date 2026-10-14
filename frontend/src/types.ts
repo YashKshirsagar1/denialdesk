@@ -113,3 +113,27 @@ export interface PipelineView {
   stages: PipelineStage[];
   total: number;
 }
+
+export interface ClinicCaseSummary {
+  id: number;
+  payer: string;
+  patient_ref: string | null;
+  dos: string | null;
+  cpt: string;
+  billed_amt: number;
+  carc: string;
+  denial_date: string | null;
+  state: string;
+  winnability_score: number | null;
+  root_cause: string | null;
+  updated_at: string;
+}
+
+export interface ClinicDashboard {
+  dollars_submitted: number;
+  dollars_recovered: number;
+  cases_in_progress: number;
+  cases_paid: number;
+  cases_declined: number;
+  total_cases: number;
+}
