@@ -13,6 +13,14 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 from denialdesk.models.case import Base  # noqa: E402
+from denialdesk.config import settings  # noqa: E402
+
+# Override alembic.ini URL with the app config (reads DATABASE_URL env var).
+# For SQLite: ensure aiosqlite driver is used.
+_db_url = settings.database_url
+if _db_url.startswith("sqlite") and "+aiosqlite" not in _db_url:
+    _db_url = _db_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+config.set_main_option("sqlalchemy.url", _db_url)
 
 target_metadata = Base.metadata
 
@@ -30,7 +38,13 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    # render_as_batch=True enables SQLite copy-and-move for ALTER TABLE (FK constraints etc.)
+    is_sqlite = connection.dialect.name == "sqlite"
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        render_as_batch=is_sqlite,
+    )
     with context.begin_transaction():
         context.run_migrations()
 

@@ -10,15 +10,16 @@
 set -euo pipefail
 
 DB_PATH="${DATABASE_PATH:-data/dev.db}"
+export DATABASE_URL="sqlite+aiosqlite:///./${DB_PATH}"
 
 echo "[reset] Removing ${DB_PATH}..."
 rm -f "${DB_PATH}"
 
-echo "[reset] Running Alembic migrations..."
-alembic upgrade head
+echo "[reset] Creating tables (SQLite dev mode — skips Alembic batch-mode issues)..."
+DATABASE_URL="${DATABASE_URL}" python scripts/init_dev_db.py
 
 echo "[reset] Seeding demo data..."
-python scripts/seed_demo.py
+DATABASE_URL="${DATABASE_URL}" python scripts/seed_demo.py
 
 echo ""
 echo "[reset] Done. Start the app:"
