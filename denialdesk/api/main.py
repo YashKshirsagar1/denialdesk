@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from denialdesk.api.routers import cases, queue, reviews
+from denialdesk.api.routers import cases, outcomes, queue, reviews
 
 app = FastAPI(title="DenialDesk", version="0.1.0")
 
@@ -15,6 +15,7 @@ app.add_middleware(
 app.include_router(queue.router, prefix="/api")
 app.include_router(cases.router, prefix="/api")
 app.include_router(reviews.router, prefix="/api")
+app.include_router(outcomes.router, prefix="/api")
 
 # Serve frontend build at / (enable after frontend is built)
 # app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="static")

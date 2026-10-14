@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getCaseDetail, getQueueCases } from './api';
 import { CaseDetailPanel } from './components/CaseDetail';
 import { DraftEditor } from './components/DraftEditor';
+import { OutcomeForm } from './components/OutcomeForm';
 import { QueueSidebar } from './components/QueueSidebar';
 import { ReviewPanel } from './components/ReviewPanel';
 import type { CaseDetail, CaseSummary, DraftInfo } from './types';
@@ -100,7 +101,13 @@ export default function App() {
               />
             )}
 
-            {detail.state !== 'awaiting_human_review' && (
+            {(detail.state === 'submitted' || detail.state === 'pending_payer') && (
+              <OutcomeForm caseId={detail.id} onOutcomeRecorded={handleReviewed} />
+            )}
+
+            {detail.state !== 'awaiting_human_review' &&
+             detail.state !== 'submitted' &&
+             detail.state !== 'pending_payer' && (
               <div style={{ color: '#6c757d', fontSize: 13, padding: '10px 0' }}>
                 State: <strong>{detail.state}</strong> — no action required
               </div>

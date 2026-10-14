@@ -1,6 +1,6 @@
 import json
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from denialdesk.models.case import PayerPlaybook
@@ -93,3 +93,62 @@ class PlaybookRepository:
         if entry is not None:
             entry.success_count += 1
             await self._session.flush()
+
+    async def update_winning_strategy(
+        self,
+        payer: str,
+        reason_code: str,
+        specialty: str,
+        winning_strategy: str,
+        required_docs: list[str],
+    ) -> PayerPlaybook:
+        """Upsert a playbook entry, updating winning_strategy and required_docs."""
+        stmt = select(PayerPlaybook).where(
+            PayerPlaybook.payer == payer,
+            PayerPlaybook.reason_code == reason_code,
+            PayerPlaybook.specialty == specialty,
+        ).limit(1)
+        result = await self._session.execute(stmt)
+        entry = result.scalar_one_or_none()
+
+        if entry is None:
+            entry = PayerPlaybook(
+                payer=payer,
+                reason_code=reason_code,
+                specialty=specialty,
+                winning_strategy=winning_strategy,
+                required_docs=json.dumps(required_docs),
+                attempt_count=0,
+                success_count=0,
+            )
+            self._session.add(entry)
+        else:
+            entry.winning_strategy = winning_strategy
+            entry.required_docs = json.dumps(required_docs)
+
+        await self._session.flush()
+        await self._session.refresh(entry)
+        return entry
+
+    async def get_win_rates(self) -> list[dict]:
+        """Return win rates per payer+reason_code+specialty, min 2 attempts, ordered by win_rate desc."""
+        result = await self._session.execute(
+            text(
+                "SELECT payer, reason_code, specialty, attempt_count, success_count, "
+                "CAST(success_count AS FLOAT) / attempt_count AS win_rate "
+                "FROM payer_playbooks "
+                "WHERE attempt_count >= 2 "
+                "ORDER BY win_rate DESC"
+            )
+        )
+        return [
+            {
+                "payer": row.payer,
+                "reason_code": row.reason_code,
+                "specialty": row.specialty,
+                "attempts": row.attempt_count,
+                "wins": row.success_count,
+                "win_rate": row.win_rate,
+            }
+            for row in result.fetchall()
+        ]

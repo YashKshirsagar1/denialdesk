@@ -1,11 +1,13 @@
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.models.case import AuditEvent, Batch, Case, CaseState, Diagnosis, Draft
+from denialdesk.models.case import AuditEvent, Batch, Case, CaseState, Diagnosis, Draft, Outcome
 
 
 class CaseRepository:
@@ -189,4 +191,36 @@ class CaseRepository:
             .limit(1)
         )
         result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def create_outcome(
+        self,
+        case_id: int,
+        result: str,
+        amount_recovered: float,
+        paid_date: Optional[date],
+        notes: str,
+    ) -> Outcome:
+        outcome = Outcome(
+            case_id=case_id,
+            result=result,
+            amount_recovered=amount_recovered,
+            paid_date=paid_date,
+            notes=notes,
+        )
+        self._session.add(outcome)
+        await self._session.flush()
+        await self._session.refresh(outcome)
+        return outcome
+
+    async def get_outcome(self, case_id: int) -> Optional[Outcome]:
+        result = await self._session.execute(
+            select(Outcome).where(Outcome.case_id == case_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_latest_diagnosis(self, case_id: int) -> Optional[Diagnosis]:
+        result = await self._session.execute(
+            select(Diagnosis).where(Diagnosis.case_id == case_id).limit(1)
+        )
         return result.scalar_one_or_none()
