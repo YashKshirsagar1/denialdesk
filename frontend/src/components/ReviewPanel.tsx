@@ -7,10 +7,12 @@ interface Props {
   draft: DraftInfo | null;
   editedContent: string;
   originalContent: string;
+  caseState: string;
   onReviewed: () => void;
 }
 
-export function ReviewPanel({ caseId, draft, editedContent, originalContent, onReviewed }: Props) {
+export function ReviewPanel({ caseId, draft, editedContent, originalContent, caseState, onReviewed }: Props) {
+  const showDownloads = caseState === 'awaiting_human_review' || caseState === 'submitted';
   const [reviewer, setReviewer] = useState('Reviewer');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
@@ -76,6 +78,27 @@ export function ReviewPanel({ caseId, draft, editedContent, originalContent, onR
         </button>
       </div>
 
+      {showDownloads && (
+        <div className="packet-downloads" style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+          <a
+            href={`/api/cases/${caseId}/packet/appeal.pdf`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ ...linkBtnStyle, background: '#e9ecef', color: '#212529' }}
+          >
+            Download Appeal Letter (PDF)
+          </a>
+          <a
+            href={`/api/cases/${caseId}/packet/call-packet.pdf`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ ...linkBtnStyle, background: '#e9ecef', color: '#212529' }}
+          >
+            Download Call Packet (PDF)
+          </a>
+        </div>
+      )}
+
       {message && (
         <div style={{
           fontSize: 13,
@@ -98,4 +121,13 @@ const btnStyle: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',
+};
+
+const linkBtnStyle: React.CSSProperties = {
+  padding: '6px 14px',
+  borderRadius: 4,
+  fontSize: 12,
+  fontWeight: 500,
+  textDecoration: 'none',
+  border: '1px solid #ced4da',
 };

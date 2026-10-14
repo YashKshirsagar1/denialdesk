@@ -1,11 +1,16 @@
+import io
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from denialdesk.api.deps import get_session
 from denialdesk.api.schemas.case import CaseDetail, CaseSummary, DraftSchema
-from denialdesk.models.case import Case, Diagnosis
+from denialdesk.export.packet_builder import PacketBuilder
+from denialdesk.models.case import Case, CaseState, Diagnosis
 
 router = APIRouter()
 
@@ -69,3 +74,80 @@ async def get_case_drafts(case_id: int, session: AsyncSession = Depends(get_sess
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
     return [DraftSchema.from_orm_draft(d) for d in sorted(case.drafts, key=lambda d: d.version, reverse=True)]
+
+
+async def _load_case_for_packet(case_id: int, session: AsyncSession) -> tuple[Case, Diagnosis | None]:
+    """Load case + diagnosis; raise 404 if not found."""
+    stmt = (
+        select(Case)
+        .options(selectinload(Case.diagnosis), selectinload(Case.drafts))
+        .where(Case.id == case_id)
+    )
+    result = await session.execute(stmt)
+    case = result.scalar_one_or_none()
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return case, case.diagnosis
+
+
+def _pick_appeal_draft(case: Case):
+    """Return the latest appeal draft, or None."""
+    appeal_drafts = [d for d in case.drafts if d.type == "appeal"]
+    if not appeal_drafts:
+        return None
+    return max(appeal_drafts, key=lambda d: d.version)
+
+
+def _pick_call_packet_draft(case: Case):
+    """Return the latest call_packet draft, or None."""
+    cp_drafts = [d for d in case.drafts if d.type == "call_packet"]
+    if not cp_drafts:
+        return None
+    return max(cp_drafts, key=lambda d: d.version)
+
+
+@router.get("/cases/{case_id}/packet/appeal.pdf")
+async def get_appeal_pdf(case_id: int, session: AsyncSession = Depends(get_session)):
+    case, diagnosis = await _load_case_for_packet(case_id, session)
+    draft = _pick_appeal_draft(case)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="No appeal draft found for this case")
+
+    packet = PacketBuilder().build_packet(case=case, diagnosis=diagnosis, draft=draft)
+    return StreamingResponse(
+        io.BytesIO(packet.appeal_pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=appeal_{case_id}.pdf"},
+    )
+
+
+@router.get("/cases/{case_id}/packet/call-packet.pdf")
+async def get_call_packet_pdf(case_id: int, session: AsyncSession = Depends(get_session)):
+    case, diagnosis = await _load_case_for_packet(case_id, session)
+    # Use call_packet draft if available, else fall back to appeal draft for case facts
+    draft = _pick_call_packet_draft(case) or _pick_appeal_draft(case)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="No draft found for this case")
+
+    packet = PacketBuilder().build_packet(case=case, diagnosis=diagnosis, draft=draft)
+    return StreamingResponse(
+        io.BytesIO(packet.call_packet_pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=call_packet_{case_id}.pdf"},
+    )
+
+
+@router.get("/cases/{case_id}/packet/attachments")
+async def get_attachments(case_id: int, session: AsyncSession = Depends(get_session)):
+    case, _ = await _load_case_for_packet(case_id, session)
+    draft = _pick_appeal_draft(case)
+    if draft is None:
+        return {"case_id": str(case_id), "attachments": []}
+
+    raw = draft.attachments or "[]"
+    try:
+        attachments = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        attachments = []
+
+    return {"case_id": str(case_id), "attachments": attachments}
