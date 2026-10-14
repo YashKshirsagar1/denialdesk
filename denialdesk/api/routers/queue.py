@@ -2,19 +2,26 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.api.deps import get_session
+from denialdesk.api.deps import get_session, require_auth
 from denialdesk.api.schemas.case import CaseSummary, QueueStats
+from denialdesk.auth.models import UserClaims
 from denialdesk.models.case import Case, CaseState, Diagnosis
 
 router = APIRouter()
 
 
 @router.get("/queue", response_model=QueueStats)
-async def get_queue_stats(session: AsyncSession = Depends(get_session)):
+async def get_queue_stats(
+    session: AsyncSession = Depends(get_session),
+    user: UserClaims = Depends(require_auth),
+):
+    tenant_ctx = user.to_tenant_context()
+
     async def _count(state: CaseState) -> int:
-        result = await session.execute(
-            select(func.count()).select_from(Case).where(Case.state == state)
-        )
+        stmt = select(func.count()).select_from(Case).where(Case.state == state)
+        if tenant_ctx is not None:
+            stmt = stmt.where(Case.tenant_id == tenant_ctx.tenant_id)
+        result = await session.execute(stmt)
         return result.scalar_one()
 
     awaiting = await _count(CaseState.awaiting_human_review)
@@ -39,7 +46,9 @@ async def list_queue_cases(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
+    user: UserClaims = Depends(require_auth),
 ):
+    tenant_ctx = user.to_tenant_context()
     states = [s.strip() for s in state.split(",") if s.strip()]
     state_enums = []
     for s in states:
@@ -56,6 +65,9 @@ async def list_queue_cases(
         .limit(limit)
         .offset(offset)
     )
+    if tenant_ctx is not None:
+        stmt = stmt.where(Case.tenant_id == tenant_ctx.tenant_id)
+
     result = await session.execute(stmt)
     rows = result.all()
 

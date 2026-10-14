@@ -5,7 +5,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.api.deps import get_session
+from denialdesk.api.deps import get_session, require_role
+from denialdesk.auth.models import Role, UserClaims
 from denialdesk.coordinator import Coordinator
 from denialdesk.ingestion.base import IngestorError
 from denialdesk.ingestion.pipeline import IngestionPipeline
@@ -14,6 +15,8 @@ from denialdesk.models.case import Practice
 
 router = APIRouter(tags=["upload"])
 logger = logging.getLogger(__name__)
+
+_upload_roles = require_role(Role.clinic_admin, Role.clinic_staff, Role.ops_admin)
 
 
 class UploadResponse(BaseModel):
@@ -51,6 +54,7 @@ async def upload_file(
     file: UploadFile = File(...),
     practice_id: int = Form(1),
     session: AsyncSession = Depends(get_session),
+    _user: UserClaims = Depends(_upload_roles),
 ) -> UploadResponse:
     practice = await session.get(Practice, practice_id)
     if practice is None:
@@ -65,7 +69,6 @@ async def upload_file(
     except IngestorError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # uuid.UUID(int=batch.id).int == batch.id — recover integer batch ID
     batch_id = result.batch_id.int
 
     return UploadResponse(
@@ -80,6 +83,7 @@ async def upload_file(
 async def process_batch(
     batch_id: int,
     session: AsyncSession = Depends(get_session),
+    _user: UserClaims = Depends(_upload_roles),
 ) -> ProcessResponse:
     llm = get_llm_provider()
     coordinator = Coordinator(session, llm)

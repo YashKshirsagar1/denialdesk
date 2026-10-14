@@ -9,7 +9,29 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from denialdesk.api.main import app
 from denialdesk.api import deps
+from denialdesk.auth.models import Role, UserClaims
 from denialdesk.models.case import AuditEvent, Base, Batch, Case, CaseState, Diagnosis, Draft, Practice
+
+
+@pytest.fixture(autouse=True)
+def default_test_user():
+    """Inject an ops_admin user into all tests by default.
+
+    This keeps every test that hits auth-protected endpoints working without
+    needing to mint tokens. Tests that need real JWT behavior (test_auth.py)
+    remove this override explicitly inside their own fixture.
+    """
+    async def _ops_user():
+        return UserClaims(
+            user_id="test-ops",
+            email="ops@test.denialdesk.local",
+            tenant_id=None,
+            role=Role.ops_admin,
+        )
+
+    app.dependency_overrides[deps.get_current_user] = _ops_user
+    yield
+    app.dependency_overrides.pop(deps.get_current_user, None)
 
 
 @pytest_asyncio.fixture
@@ -29,12 +51,25 @@ async def db_session():
 
 @pytest_asyncio.fixture
 async def api_client(db_session: AsyncSession):
-    """AsyncClient with get_session overridden to use the test SQLite session."""
+    """AsyncClient with get_session overridden to use the test SQLite session.
+
+    Also overrides get_current_user to return an ops_admin user so all
+    auth-protected endpoints work without a real JWT in tests.
+    """
 
     async def override_get_session():
         yield db_session
 
+    async def override_get_current_user():
+        return UserClaims(
+            user_id="test-ops",
+            email="ops@test.denialdesk.local",
+            tenant_id=None,
+            role=Role.ops_admin,
+        )
+
     app.dependency_overrides[deps.get_session] = override_get_session
+    app.dependency_overrides[deps.get_current_user] = override_get_current_user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client

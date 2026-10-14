@@ -2,8 +2,11 @@ from collections.abc import AsyncGenerator
 from typing import Optional
 
 from fastapi import Depends, Header, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from denialdesk.auth.jwt import verify_token
+from denialdesk.auth.models import Role, UserClaims
 from denialdesk.config import settings
 from denialdesk.repositories.tenant_scoped import TenantContext
 
@@ -35,6 +38,51 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+
+# ---------------------------------------------------------------------------
+# JWT auth (new in Phase 2 Step 3)
+# ---------------------------------------------------------------------------
+
+_bearer = HTTPBearer(auto_error=False)
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> UserClaims | None:
+    """Extract and verify JWT from Authorization: Bearer <token> header."""
+    if credentials is None:
+        return None
+    return verify_token(credentials.credentials)
+
+
+async def require_auth(
+    user: UserClaims | None = Depends(get_current_user),
+) -> UserClaims:
+    """Raises 401 if no valid token is present."""
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user
+
+
+def require_role(*roles: Role):
+    """Dependency factory: raises 403 if the user's role is not in the allowed set."""
+
+    async def _check(user: UserClaims = Depends(require_auth)) -> UserClaims:
+        if user.role not in roles:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Role '{user.role.value}' not permitted. Required: {[r.value for r in roles]}",
+            )
+        return user
+
+    return _check
+
+
+# ---------------------------------------------------------------------------
+# Legacy X-Tenant-ID header functions (kept for backwards compatibility)
+# These are tested directly in test_tenant_isolation.py.
+# ---------------------------------------------------------------------------
 
 
 def get_tenant_context(

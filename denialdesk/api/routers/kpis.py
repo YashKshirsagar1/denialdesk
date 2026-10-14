@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.api.deps import get_session
+from denialdesk.api.deps import get_session, require_role
 from denialdesk.api.schemas.kpis import (
     OverviewKPIs,
     PipelineStage,
@@ -14,10 +14,13 @@ from denialdesk.api.schemas.kpis import (
     WinRateRow,
     WinRateTable,
 )
+from denialdesk.auth.models import Role, UserClaims
 from denialdesk.models.case import Case, CaseState, Diagnosis, Outcome
 from denialdesk.repositories.playbook_repository import PlaybookRepository
 
 router = APIRouter(prefix="/kpis", tags=["kpis"])
+
+_ops_only = require_role(Role.ops_admin)
 
 _ATTEMPTED_STATES = {
     CaseState.submitted,
@@ -38,7 +41,10 @@ _SCORE_BUCKETS = [
 
 
 @router.get("/overview", response_model=OverviewKPIs)
-async def get_overview(session: AsyncSession = Depends(get_session)):
+async def get_overview(
+    session: AsyncSession = Depends(get_session),
+    _user: UserClaims = Depends(_ops_only),
+):
     # Total cases
     total_cases_r = await session.execute(select(func.count()).select_from(Case))
     total_cases = total_cases_r.scalar_one() or 0
@@ -68,15 +74,7 @@ async def get_overview(session: AsyncSession = Depends(get_session)):
     total_amount_recovered = sum(float(o.amount_recovered or 0) for o in paid_outcomes)
     avg_amount_recovered = total_amount_recovered / total_paid if total_paid else 0.0
 
-    # Closed cases that weren't paid = denied final
     paid_case_ids = {o.case_id for o in paid_outcomes}
-    total_denied_final = sum(
-        1 for s in all_states if s == CaseState.closed
-    ) - sum(
-        1 for o in paid_outcomes
-        if any(True for s in all_states)  # simplified: count closed paid cases
-    )
-    # Recalculate properly: closed cases minus paid cases that are also closed
     closed_r = await session.execute(
         select(Case.id).where(Case.state == CaseState.closed)
     )
@@ -134,6 +132,7 @@ async def get_overview(session: AsyncSession = Depends(get_session)):
 async def get_win_rates(
     min_attempts: int = 1,
     session: AsyncSession = Depends(get_session),
+    _user: UserClaims = Depends(_ops_only),
 ):
     result = await session.execute(
         text(
@@ -160,15 +159,16 @@ async def get_win_rates(
 
 
 @router.get("/score-accuracy", response_model=ScoreAccuracy)
-async def get_score_accuracy(session: AsyncSession = Depends(get_session)):
-    # Join diagnoses + outcomes
+async def get_score_accuracy(
+    session: AsyncSession = Depends(get_session),
+    _user: UserClaims = Depends(_ops_only),
+):
     diag_r = await session.execute(select(Diagnosis))
     diagnoses = {d.case_id: d for d in diag_r.scalars().all()}
 
     outcome_r = await session.execute(select(Outcome))
     outcomes = {o.case_id: o for o in outcome_r.scalars().all()}
 
-    # Only cases with both a diagnosis and an outcome
     paired = [
         (diagnoses[cid], outcomes[cid])
         for cid in diagnoses
@@ -199,7 +199,10 @@ async def get_score_accuracy(session: AsyncSession = Depends(get_session)):
 
 
 @router.get("/pipeline", response_model=PipelineView)
-async def get_pipeline(session: AsyncSession = Depends(get_session)):
+async def get_pipeline(
+    session: AsyncSession = Depends(get_session),
+    _user: UserClaims = Depends(_ops_only),
+):
     result = await session.execute(
         text("SELECT state, COUNT(*) as cnt FROM cases GROUP BY state")
     )

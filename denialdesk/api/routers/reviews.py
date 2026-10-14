@@ -6,11 +6,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from denialdesk.api.deps import get_session
+from denialdesk.api.deps import get_session, require_role
 from denialdesk.api.schemas.review import ReviewRequest, ReviewResponse
+from denialdesk.auth.models import Role, UserClaims
 from denialdesk.models.case import AuditEvent, Case, CaseState, Draft, Review
 
 router = APIRouter()
+
+_review_roles = require_role(Role.reviewer, Role.ops_admin)
 
 
 @router.post("/cases/{case_id}/review", response_model=ReviewResponse)
@@ -18,6 +21,7 @@ async def review_case(
     case_id: int,
     body: ReviewRequest,
     session: AsyncSession = Depends(get_session),
+    _user: UserClaims = Depends(_review_roles),
 ):
     stmt = (
         select(Case)
@@ -66,7 +70,6 @@ async def review_case(
         original_content = latest_draft.content or ""
         edited_content = body.edits or original_content
 
-        # Compute unified diff
         diff_lines = list(difflib.unified_diff(
             original_content.splitlines(keepends=True),
             edited_content.splitlines(keepends=True),
@@ -75,7 +78,6 @@ async def review_case(
         ))
         edits_diff = "".join(diff_lines) if diff_lines else ""
 
-        # New draft version
         new_draft = Draft(
             case_id=case_id,
             tenant_id=case.tenant_id,

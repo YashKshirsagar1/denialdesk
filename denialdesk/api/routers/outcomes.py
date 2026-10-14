@@ -4,13 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.api.deps import get_session
+from denialdesk.api.deps import get_session, require_role
 from denialdesk.api.schemas.outcome import OutcomeRequest, OutcomeResponse, OutcomeSummary
+from denialdesk.auth.models import Role, UserClaims
 from denialdesk.learning.outcome_processor import OutcomeInput, OutcomeProcessor, OutcomeResult
 from denialdesk.models.case import Outcome
 from denialdesk.repositories.case_repository import CaseRepository
 
 router = APIRouter(tags=["outcomes"])
+
+_outcome_roles = require_role(Role.reviewer, Role.ops_admin)
 
 
 @router.post("/cases/{case_id}/outcome", response_model=OutcomeResponse)
@@ -18,6 +21,7 @@ async def record_outcome(
     case_id: int,
     body: OutcomeRequest,
     session: AsyncSession = Depends(get_session),
+    _user: UserClaims = Depends(_outcome_roles),
 ):
     processor = OutcomeProcessor(session)
     try:
