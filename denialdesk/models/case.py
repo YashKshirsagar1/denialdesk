@@ -117,6 +117,7 @@ class Case(TimestampMixin, Base):
     submissions: Mapped[list["Submission"]] = relationship("Submission", back_populates="case")
     outcome: Mapped[Optional["Outcome"]] = relationship("Outcome", back_populates="case", uselist=False)
     audit_events: Mapped[list["AuditEvent"]] = relationship("AuditEvent", back_populates="case")
+    document_requests: Mapped[list["DocumentRequest"]] = relationship("DocumentRequest", back_populates="case")
 
     @property
     def is_terminal(self) -> bool:
@@ -226,6 +227,34 @@ class PayerPlaybook(TimestampMixin, Base):
     required_docs: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON array stored as text
     success_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class DocumentRequestStatus(str, enum.Enum):
+    pending   = "pending"
+    fulfilled = "fulfilled"
+    cancelled = "cancelled"
+
+
+class DocumentRequest(Base):
+    __tablename__ = "document_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[int] = mapped_column(ForeignKey("cases.id"), nullable=False, index=True)
+    tenant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("practices.id"), nullable=True, index=True)
+    requested_by: Mapped[str] = mapped_column(String(100), nullable=False)
+    document_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[DocumentRequestStatus] = mapped_column(
+        Enum(DocumentRequestStatus, name="documentrequeststatus"),
+        default=DocumentRequestStatus.pending,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    fulfilled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # In prod this becomes a private S3 key; never log this value as it may contain PHI context
+    file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    case: Mapped["Case"] = relationship("Case", back_populates="document_requests")
 
 
 class AuditEvent(Base):

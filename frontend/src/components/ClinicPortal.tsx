@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
-import { getAllCases, getClinicDashboard, getCaseDetail } from '../api'
+import { useEffect, useRef, useState } from 'react'
+import { getAllCases, getClinicDashboard, getCaseDetail, getDocumentRequests, fulfillDocumentRequest } from '../api'
 import { clearToken } from '../auth'
 import { formatCaseStatus, statusColor } from '../lib/caseStatus'
 import { UploadForm } from './UploadForm'
-import type { ClinicCaseSummary, ClinicDashboard, CaseDetail } from '../types'
+import type { ClinicCaseSummary, ClinicDashboard, CaseDetail, DocumentRequest } from '../types'
 
-type Tab = 'upload' | 'claims' | 'dashboard'
+type Tab = 'upload' | 'claims' | 'dashboard' | 'requests'
 
 const tabBtn = (active: boolean): React.CSSProperties => ({
   padding: '8px 20px',
@@ -47,9 +47,13 @@ export function ClinicPortal({ onLogout }: Props) {
   const [dashboard, setDashboard] = useState<ClinicDashboard | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [expandedDetail, setExpandedDetail] = useState<CaseDetail | null>(null)
+  const [docRequests, setDocRequests] = useState<DocumentRequest[]>([])
   const [loadingCases, setLoadingCases] = useState(false)
   const [loadingDash, setLoadingDash] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [loadingReqs, setLoadingReqs] = useState(false)
+  const [fulfillingId, setFulfillingId] = useState<number | null>(null)
+  const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
   const [error, setError] = useState<string | null>(null)
 
   async function loadCases() {
@@ -78,6 +82,31 @@ export function ClinicPortal({ onLogout }: Props) {
     }
   }
 
+  async function loadDocRequests() {
+    setLoadingReqs(true)
+    setError(null)
+    try {
+      const data = await getDocumentRequests()
+      setDocRequests(data)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setLoadingReqs(false)
+    }
+  }
+
+  async function handleFulfill(req: DocumentRequest, file?: File) {
+    setFulfillingId(req.id)
+    try {
+      const updated = await fulfillDocumentRequest(req.id, file)
+      setDocRequests(prev => prev.map(r => r.id === updated.id ? updated : r))
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setFulfillingId(null)
+    }
+  }
+
   useEffect(() => {
     loadCases()
   }, [])
@@ -85,6 +114,9 @@ export function ClinicPortal({ onLogout }: Props) {
   useEffect(() => {
     if (activeTab === 'dashboard' && dashboard === null) {
       loadDashboard()
+    }
+    if (activeTab === 'requests') {
+      loadDocRequests()
     }
   }, [activeTab])
 
@@ -107,6 +139,8 @@ export function ClinicPortal({ onLogout }: Props) {
     }
   }
 
+  const pendingReqs = docRequests.filter(r => r.status === 'pending').length
+
   const recoveryRate = dashboard
     ? dashboard.dollars_submitted > 0
       ? ((dashboard.dollars_recovered / dashboard.dollars_submitted) * 100).toFixed(1) + '%'
@@ -121,6 +155,13 @@ export function ClinicPortal({ onLogout }: Props) {
         <button style={tabBtn(activeTab === 'upload')} onClick={() => setActiveTab('upload')}>Upload Claims</button>
         <button style={tabBtn(activeTab === 'claims')} onClick={() => setActiveTab('claims')}>My Claims</button>
         <button style={tabBtn(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
+        <button style={tabBtn(activeTab === 'requests')} onClick={() => setActiveTab('requests')}>
+          Requests{pendingReqs > 0 && (
+            <span style={{ marginLeft: 6, background: '#dc3545', color: '#fff', borderRadius: 10, fontSize: 11, padding: '1px 6px', fontWeight: 700 }}>
+              {pendingReqs}
+            </span>
+          )}
+        </button>
         <div style={{ marginLeft: 'auto' }}>
           <button
             onClick={onLogout}
@@ -254,6 +295,99 @@ export function ClinicPortal({ onLogout }: Props) {
             )}
           </div>
         )}
+        {/* Requests tab */}
+        {activeTab === 'requests' && (
+          <div style={{ padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 18 }}>Document Requests</h2>
+              <button
+                onClick={loadDocRequests}
+                style={{ padding: '4px 12px', fontSize: 12, background: 'none', border: '1px solid #ced4da', borderRadius: 4, cursor: 'pointer', color: '#6c757d' }}
+              >
+                Refresh
+              </button>
+            </div>
+
+            {loadingReqs && <div style={{ color: '#6c757d' }}>Loading requests...</div>}
+
+            {!loadingReqs && docRequests.length === 0 && (
+              <div style={{ color: '#6c757d', textAlign: 'center', padding: '40px 0' }}>
+                No documents requested — you are all set.
+              </div>
+            )}
+
+            {!loadingReqs && docRequests.length > 0 && (() => {
+              const pending = docRequests.filter(r => r.status === 'pending')
+              const completed = docRequests.filter(r => r.status !== 'pending')
+              return (
+                <>
+                  {pending.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#6c757d', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+                        Pending ({pending.length})
+                      </div>
+                      {pending.map(req => (
+                        <div key={req.id} style={{ background: '#fff', border: '1px solid #dee2e6', borderRadius: 8, padding: '16px 20px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                              <span style={{ background: '#fff3cd', color: '#856404', borderRadius: 4, fontSize: 11, padding: '2px 8px', fontWeight: 600 }}>
+                                {req.document_type.replace(/_/g, ' ')}
+                              </span>
+                              <span style={{ fontSize: 12, color: '#6c757d' }}>Case #{req.case_id}</span>
+                            </div>
+                            <div style={{ fontSize: 13, color: '#212529' }}>{req.description}</div>
+                          </div>
+                          <div>
+                            <input
+                              type="file"
+                              ref={el => { fileInputRefs.current[req.id] = el }}
+                              style={{ display: 'none' }}
+                              onChange={async (e) => {
+                                const f = e.target.files?.[0]
+                                await handleFulfill(req, f)
+                                if (e.target) e.target.value = ''
+                              }}
+                            />
+                            <button
+                              onClick={() => fileInputRefs.current[req.id]?.click()}
+                              disabled={fulfillingId === req.id}
+                              style={{ padding: '6px 14px', fontSize: 13, background: '#0d6efd', color: '#fff', border: 'none', borderRadius: 4, cursor: fulfillingId === req.id ? 'not-allowed' : 'pointer', opacity: fulfillingId === req.id ? 0.7 : 1 }}
+                            >
+                              {fulfillingId === req.id ? 'Uploading...' : 'Upload Document'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {completed.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#6c757d', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+                        Completed ({completed.length})
+                      </div>
+                      {completed.map(req => (
+                        <div key={req.id} style={{ background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: 8, padding: '14px 20px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                              <span style={{ background: '#d1e7dd', color: '#0a3622', borderRadius: 4, fontSize: 11, padding: '2px 8px', fontWeight: 600 }}>
+                                {req.document_type.replace(/_/g, ' ')}
+                              </span>
+                              <span style={{ fontSize: 12, color: '#6c757d' }}>Case #{req.case_id}</span>
+                            </div>
+                            <div style={{ fontSize: 13, color: '#6c757d' }}>{req.description}</div>
+                          </div>
+                          <div style={{ fontSize: 12, color: '#198754', fontWeight: 600 }}>Fulfilled</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+          </div>
+        )}
+
       </div>
     </div>
   )

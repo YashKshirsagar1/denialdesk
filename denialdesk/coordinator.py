@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from denialdesk.agents.diagnosis_agent import DiagnosisAgent
 from denialdesk.agents.drafting_agent import DraftingAgent
 from denialdesk.llm.base import LLMProvider
-from denialdesk.models.case import AuditEvent, Case, CaseState
+from denialdesk.models.case import AuditEvent, Case, CaseState, DocumentRequest, DocumentRequestStatus
 from denialdesk.repositories import CaseRepository
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,30 @@ class Coordinator:
             await self._session.refresh(case)
 
             score = diagnosis.winnability_score or 0.0
+
+            # Create document requests opportunistically (non-blocking for MVP)
+            doc_reqs = self._diagnosis_agent.get_missing_document_requests(case)
+            for dr_data in doc_reqs:
+                doc_req = DocumentRequest(
+                    case_id=case.id,
+                    tenant_id=case.tenant_id,
+                    requested_by=dr_data["requested_by"],
+                    document_type=dr_data["document_type"],
+                    description=dr_data["description"],
+                    status=DocumentRequestStatus.pending,
+                    created_at=datetime.now(timezone.utc),
+                )
+                self._session.add(doc_req)
+                audit = AuditEvent(
+                    case_id=case.id,
+                    tenant_id=case.tenant_id,
+                    actor="coordinator",
+                    action=f"document_request_created:{dr_data['document_type']}",
+                    timestamp=datetime.now(timezone.utc),
+                )
+                self._session.add(audit)
+            if doc_reqs:
+                await self._session.flush()
 
             # 2. Auto-decline if score is below threshold
             if score < DECLINE_THRESHOLD:

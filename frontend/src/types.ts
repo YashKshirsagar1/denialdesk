@@ -129,6 +129,19 @@ export interface ClinicCaseSummary {
   updated_at: string;
 }
 
+export interface DocumentRequest {
+  id: number;
+  case_id: number;
+  tenant_id: number | null;
+  requested_by: string;
+  document_type: string;
+  description: string;
+  status: 'pending' | 'fulfilled' | 'cancelled';
+  created_at: string;
+  fulfilled_at: string | null;
+  file_path: string | null;
+}
+
 export interface ClinicDashboard {
   dollars_submitted: number;
   dollars_recovered: number;

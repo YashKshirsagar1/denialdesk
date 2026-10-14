@@ -166,6 +166,46 @@ class DiagnosisAgent:
             model_version=self.model_version,
         )
 
+    def get_missing_document_requests(self, case: Case) -> list[dict]:
+        """Return document requests the agent needs based on CARC/root-cause.
+
+        Called by the coordinator after diagnosis. The coordinator creates
+        DocumentRequest rows; this method is a pure data function.
+        """
+        carc = case.carc or ""
+        root_cause = CARC_ROOT_CAUSE.get(carc, RootCause.other)
+        requests: list[dict] = []
+
+        if root_cause == RootCause.missing_prior_auth:
+            requests.append({
+                "document_type": "prior_auth",
+                "description": (
+                    f"Please upload the prior authorization for CPT {case.cpt_hcpcs or 'unknown'} "
+                    f"from {case.payer}."
+                ),
+                "requested_by": "diagnosis_agent",
+            })
+        elif root_cause == RootCause.missing_info:
+            requests.append({
+                "document_type": "chart_note",
+                "description": (
+                    f"Please upload the chart note or clinical documentation for the "
+                    f"service on {case.dos.date() if case.dos else 'DOS unknown'} (CPT {case.cpt_hcpcs or 'unknown'})."
+                ),
+                "requested_by": "diagnosis_agent",
+            })
+        elif root_cause == RootCause.medical_necessity:
+            requests.append({
+                "document_type": "medical_records",
+                "description": (
+                    f"Please upload supporting medical records documenting medical necessity "
+                    f"for CPT {case.cpt_hcpcs or 'unknown'} billed to {case.payer}."
+                ),
+                "requested_by": "diagnosis_agent",
+            })
+
+        return requests
+
     async def diagnose_batch(self, cases: list[Case]) -> list[Diagnosis]:
         """Diagnose a list of cases concurrently."""
         return list(await asyncio.gather(*[self.diagnose(c) for c in cases]))
