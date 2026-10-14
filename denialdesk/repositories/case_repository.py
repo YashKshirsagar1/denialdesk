@@ -72,6 +72,7 @@ class CaseRepository:
     ) -> Batch:
         batch = Batch(
             practice_id=practice_id,
+            tenant_id=practice_id,
             uploaded_at=datetime.now(timezone.utc),
             source_files=filename,
         )
@@ -86,8 +87,12 @@ class CaseRepository:
         record,  # ClaimRecord — avoid circular import by using duck typing
     ) -> tuple[Case, AuditEvent]:
         """Create a Case in 'ingested' state with an audit event."""
+        batch = await self._session.get(Batch, batch_id)
+        tenant_id = batch.tenant_id if batch else None
+
         case = Case(
             batch_id=batch_id,
+            tenant_id=tenant_id,
             payer=record.payer,
             patient_ref=record.patient_ref,
             dos=datetime(record.dos.year, record.dos.month, record.dos.day, tzinfo=timezone.utc),
@@ -110,6 +115,7 @@ class CaseRepository:
 
         event = AuditEvent(
             case_id=case.id,
+            tenant_id=tenant_id,
             actor="ingestion_pipeline",
             action=f"ingested from {record.source_format}",
             timestamp=datetime.now(timezone.utc),
@@ -122,12 +128,13 @@ class CaseRepository:
 
     async def save_diagnosis(self, diagnosis: Diagnosis) -> Diagnosis:
         """Persist a Diagnosis and transition the associated Case to 'diagnosed' state."""
-        self._session.add(diagnosis)
-        await self._session.flush()
-
         case = await self.get_case(diagnosis.case_id)
         if case is None:
             raise ValueError(f"Case {diagnosis.case_id} not found")
+
+        diagnosis.tenant_id = case.tenant_id
+        self._session.add(diagnosis)
+        await self._session.flush()
 
         event = case.transition(
             CaseState.diagnosed,
@@ -148,8 +155,13 @@ class CaseRepository:
         same_type = [d for d in existing if d.type == draft_result.draft_type.value]
         version = (max((d.version for d in same_type), default=0) + 1)
 
+        case = await self.get_case(case_id)
+        if case is None:
+            raise ValueError(f"Case {case_id} not found")
+
         draft = Draft(
             case_id=case_id,
+            tenant_id=case.tenant_id,
             type=draft_result.draft_type.value,
             content=draft_result.content,
             attachments=json.dumps(draft_result.attachments),
@@ -157,10 +169,6 @@ class CaseRepository:
         )
         self._session.add(draft)
         await self._session.flush()
-
-        case = await self.get_case(case_id)
-        if case is None:
-            raise ValueError(f"Case {case_id} not found")
 
         if case.state in (CaseState.approved, CaseState.awaiting_human_review):
             event = case.transition(

@@ -43,6 +43,7 @@ async def review_case(
         if latest_draft:
             review = Review(
                 draft_id=latest_draft.id,
+                tenant_id=case.tenant_id,
                 reviewer=body.reviewer,
                 decision="approved",
                 edits_diff=None,
@@ -77,6 +78,7 @@ async def review_case(
         # New draft version
         new_draft = Draft(
             case_id=case_id,
+            tenant_id=case.tenant_id,
             type="appeal",
             content=edited_content,
             attachments=latest_draft.attachments,
@@ -87,6 +89,7 @@ async def review_case(
 
         review = Review(
             draft_id=new_draft.id,
+            tenant_id=case.tenant_id,
             reviewer=body.reviewer,
             decision="edited",
             edits_diff=edits_diff,
@@ -106,6 +109,7 @@ async def review_case(
         if latest_draft:
             review = Review(
                 draft_id=latest_draft.id,
+                tenant_id=case.tenant_id,
                 reviewer=body.reviewer,
                 decision="rejected",
                 edits_diff=None,

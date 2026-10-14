@@ -57,12 +57,15 @@ class PdfIngestor(BaseIngestor):
         return records, errors
 
     def _extract_text(self, content: bytes) -> str:
-        parts = []
-        with pdfplumber.open(io.BytesIO(content)) as pdf:
-            for page in pdf.pages:
-                page_text = page.extract_text() or ""
-                parts.append(page_text)
-        return "\n".join(parts)
+        try:
+            parts = []
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
+                for page in pdf.pages:
+                    page_text = page.extract_text() or ""
+                    parts.append(page_text)
+            return "\n".join(parts)
+        except Exception as exc:
+            raise IngestorError(f"PDF extraction failed: {exc}") from exc
 
     def _structured_parse(self, text: str) -> tuple[list[ClaimRecord], list[str]]:
         errors: list[str] = []

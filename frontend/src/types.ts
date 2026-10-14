@@ -18,6 +18,7 @@ export interface DraftInfo {
 export interface CaseSummary {
   id: number;
   payer: string;
+  patient_ref: string | null;
   cpt: string;
   billed_amt: number;
   carc: string;

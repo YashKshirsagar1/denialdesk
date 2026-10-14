@@ -54,6 +54,7 @@ class OutcomeProcessor:
 
         outcome = Outcome(
             case_id=case_id,
+            tenant_id=case.tenant_id,
             result=outcome_input.result.value,
             amount_recovered=float(outcome_input.amount_recovered),
             paid_date=outcome_input.paid_date,

@@ -6,9 +6,10 @@ import { DraftEditor } from './components/DraftEditor';
 import { OutcomeForm } from './components/OutcomeForm';
 import { QueueSidebar } from './components/QueueSidebar';
 import { ReviewPanel } from './components/ReviewPanel';
+import { UploadForm } from './components/UploadForm';
 import type { CaseDetail, CaseSummary, DraftInfo } from './types';
 
-type Tab = 'queue' | 'dashboard';
+type Tab = 'upload' | 'queue' | 'dashboard';
 
 const tabBtn = (active: boolean): React.CSSProperties => ({
   padding: '8px 20px',
@@ -22,7 +23,7 @@ const tabBtn = (active: boolean): React.CSSProperties => ({
 });
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('queue');
+  const [activeTab, setActiveTab] = useState<Tab>('upload');
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<CaseDetail | null>(null);
@@ -75,11 +76,16 @@ export default function App() {
       {/* Tab bar */}
       <div style={{ borderBottom: '1px solid #dee2e6', padding: '0 16px', display: 'flex', alignItems: 'center', background: '#fff', flexShrink: 0 }}>
         <span style={{ fontWeight: 700, fontSize: 15, marginRight: 24, color: '#212529' }}>DenialDesk</span>
+        <button style={tabBtn(activeTab === 'upload')} onClick={() => setActiveTab('upload')}>Upload</button>
         <button style={tabBtn(activeTab === 'queue')} onClick={() => setActiveTab('queue')}>Review Queue</button>
         <button style={tabBtn(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
       </div>
 
-      {activeTab === 'dashboard' ? (
+      {activeTab === 'upload' ? (
+        <div style={{ flex: 1, overflowY: 'auto', background: '#f8f9fa' }}>
+          <UploadForm />
+        </div>
+      ) : activeTab === 'dashboard' ? (
         <div style={{ flex: 1, overflowY: 'auto', background: '#f8f9fa' }}>
           <Dashboard />
         </div>
@@ -125,6 +131,7 @@ export default function App() {
                     draft={appealDraft}
                     editedContent={editedContent}
                     originalContent={originalContent}
+                    caseState={detail.state}
                     onReviewed={handleReviewed}
                   />
                 )}

@@ -59,7 +59,7 @@ class Practice(TimestampMixin, Base):
     specialty: Mapped[str] = mapped_column(String(100), nullable=False)
     contact: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    batches: Mapped[list["Batch"]] = relationship("Batch", back_populates="practice")
+    batches: Mapped[list["Batch"]] = relationship("Batch", back_populates="practice", foreign_keys="Batch.practice_id")
 
 
 class Batch(TimestampMixin, Base):
@@ -67,10 +67,11 @@ class Batch(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     practice_id: Mapped[int] = mapped_column(ForeignKey("practices.id"), nullable=False)
+    tenant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("practices.id"), nullable=True, index=True)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
     source_files: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    practice: Mapped["Practice"] = relationship("Practice", back_populates="batches")
+    practice: Mapped["Practice"] = relationship("Practice", back_populates="batches", foreign_keys=[practice_id])
     cases: Mapped[list["Case"]] = relationship("Case", back_populates="batch")
 
 
@@ -94,6 +95,7 @@ class Case(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     batch_id: Mapped[int] = mapped_column(ForeignKey("batches.id"), nullable=False)
+    tenant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("practices.id"), nullable=True, index=True)
     payer: Mapped[str] = mapped_column(String(255), nullable=False)
     patient_ref: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     dos: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -135,6 +137,7 @@ class Case(TimestampMixin, Base):
             action = f"{action} | {action_note}"
         return AuditEvent(
             case_id=self.id,
+            tenant_id=self.tenant_id,
             actor=actor,
             action=action,
             inputs_hash=None,
@@ -147,6 +150,7 @@ class Diagnosis(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     case_id: Mapped[int] = mapped_column(ForeignKey("cases.id"), nullable=False, unique=True)
+    tenant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("practices.id"), nullable=True, index=True)
     root_cause: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     winnability_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     expected_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -161,6 +165,7 @@ class Draft(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     case_id: Mapped[int] = mapped_column(ForeignKey("cases.id"), nullable=False)
+    tenant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("practices.id"), nullable=True, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)  # appeal | corrected_claim | call_packet
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     attachments: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -175,6 +180,7 @@ class Review(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     draft_id: Mapped[int] = mapped_column(ForeignKey("drafts.id"), nullable=False)
+    tenant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("practices.id"), nullable=True, index=True)
     reviewer: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     decision: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # approved | rejected | edited
     edits_diff: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -200,6 +206,7 @@ class Outcome(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     case_id: Mapped[int] = mapped_column(ForeignKey("cases.id"), nullable=False, unique=True)
+    tenant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("practices.id"), nullable=True, index=True)
     result: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # paid | denied
     amount_recovered: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     paid_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -226,6 +233,7 @@ class AuditEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     case_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cases.id"), nullable=True)
+    tenant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("practices.id"), nullable=True, index=True)
     actor: Mapped[str] = mapped_column(String(255), nullable=False)
     action: Mapped[str] = mapped_column(String(255), nullable=False)
     inputs_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

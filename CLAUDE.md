@@ -112,6 +112,90 @@ After each step, write tests and keep a running eval for diagnosis accuracy and 
 - Ask before choosing a stack if it isn't already set up; otherwise propose a default and explain it in one line.
 - Flag anything that would touch real PHI or submit to a real payer, and stop for confirmation.
 
+## 11. Status
+
+Phase 1 (sections 1–10, the MVP agent pipeline) is built. Before starting Phase 2, review the existing code against this file and list any gaps. Don't rebuild what already works.
+
+## 12. Phase 2 — Pilot-ready portal
+
+**Goal:** 2–3 friendly clinics send real denials, we work them, and we measure a real recovery rate. Make it secure and simple, not polished.
+
+**Product shape:** a secure web portal for clinics plus an internal ops console for our team. The clinic never runs the agent. They upload and watch; we work the claims behind the scenes.
+
+### 12.1 Clinic portal (what the clinic sees)
+- Login with MFA, invite-only (no public signup yet).
+- Upload a batch: 835/CSV + EOB PDFs + chart notes.
+- Case list with plain-English status ("Appeal submitted to Aetna on 10/20", "Declined: past filing deadline").
+- **Requests inbox:** when the agent needs a missing document, the clinic gets a request and uploads the answer there.
+- Dashboard: dollars submitted, dollars recovered, cases in progress.
+- Monthly statement of recoveries and fees.
+
+### 12.2 Internal ops console (what our team sees)
+- The existing review queue, call packets, and outcome entry, now across all clinics.
+- Cross-clinic KPI dashboard (section 7) and win rate by payer x reason code x specialty.
+- Deadline view: every case sorted by its next filing deadline, with alerts.
+
+### 12.3 Multi-tenancy and access
+- Every record carries `tenant_id` (the clinic). Enforce isolation in the database (row-level security or equivalent), not only in app code.
+- Write automated tests proving one clinic can never read another clinic's data.
+- Roles: `clinic_admin`, `clinic_staff`, `reviewer`, `ops_admin`.
+- Use a managed identity provider that supports MFA. Don't hand-roll auth.
+
+### 12.4 Infrastructure (HIPAA-ready)
+- Deploy on a HIPAA-eligible cloud under a signed BAA, using only BAA-covered services.
+- Two environments: `dev` (synthetic data only, forever) and `prod` (real PHI). Real PHI never enters dev, test fixtures, or local machines.
+- Encryption at rest and in transit. Secrets in a secrets manager, never in code or `.env` files committed to git.
+- Uploaded files go in private storage with short-lived signed URLs.
+- Automated backups with a tested restore.
+- **No PHI in logs, error tracking, or analytics.** Scrub or tokenize before anything leaves the app.
+
+### 12.5 LLM usage with PHI
+- Only call an LLM provider under a signed BAA, with zero data retention enabled where available.
+- Send the minimum necessary data in each prompt.
+- Log model version + prompt template id per call, but not raw PHI outside the protected database.
+
+### 12.6 Audit
+- Log every access to PHI, reads included, not just changes: who, what, when, why.
+- Clinic admins can see an access log for their own data.
+
+### 12.7 Onboarding flow
+- A clinic account stays locked (no uploads) until the BAA and service agreement are marked signed by an ops admin.
+- Onboarding checklist: agreements signed, practice details, specialties, payers they bill, delegated payer-portal accounts created for our staff (never shared clinic passwords).
+
+### 12.8 Recovery verification and billing
+- An `Outcome` becomes billable only with evidence: a matching 835 payment line or a clinic confirmation recorded in the portal.
+- Fee calculation: 20–25% standard, 30–35% aged, configurable per clinic contract.
+- Monthly statement generated per clinic; invoices sent through a payment provider such as Stripe. Never store card or bank numbers ourselves.
+
+### 12.9 Phase 2 build order
+1. Gap review of the Phase 1 code against this file.
+2. Tenant model + row-level isolation + isolation tests.
+3. Auth with MFA and roles.
+4. Clinic portal: upload, case list, status.
+5. Requests inbox (agent -> clinic document requests).
+6. Ops console upgrades: multi-clinic queue, deadline view.
+7. PHI-safe logging and access audit.
+8. Onboarding flow with the agreement lock.
+9. Recovery verification + fee calc + monthly statements.
+10. Infrastructure-as-code for `prod`, backups, restore test.
+11. Security review pass (Claude Code self-review, then an outside reviewer before go-live).
+
+### 12.10 Go-live gate (all must be true before any real PHI)
+Claude Code can't do these. They are founder tasks, and the app must not be pointed at real data until each is done:
+- [ ] Legal entity formed; cyber + E&O insurance in place.
+- [ ] BAA signed with the cloud provider and the LLM provider.
+- [ ] Clinic BAA + service agreement drafted by a healthcare lawyer.
+- [ ] HIPAA risk assessment completed; written security and privacy policies.
+- [ ] Isolation tests, restore test, and security review all passed.
+- [ ] Pilot clinics recruited and signed.
+
+### 12.11 Pilot success metrics
+- Recovery rate on attempted claims, and dollars recovered per clinic.
+- Days from upload to payment.
+- Score accuracy (predicted winnable vs actual outcome).
+- Reviewer minutes per claim.
+- Would the clinic keep using it and refer another practice?
+
 ## Reference
 
 Pitch deck (business context, market data, root questions, risks, exit thesis):

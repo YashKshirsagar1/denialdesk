@@ -1,8 +1,11 @@
 from collections.abc import AsyncGenerator
+from typing import Optional
 
+from fastapi import Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from denialdesk.config import settings
+from denialdesk.repositories.tenant_scoped import TenantContext
 
 
 def _make_session_factory(url: str) -> async_sessionmaker[AsyncSession]:
@@ -32,3 +35,22 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+
+def get_tenant_context(
+    x_tenant_id: Optional[str] = Header(default=None),
+) -> Optional[TenantContext]:
+    if x_tenant_id is None:
+        return None
+    try:
+        return TenantContext(tenant_id=int(x_tenant_id))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="X-Tenant-ID must be an integer")
+
+
+def require_tenant_context(
+    tenant: Optional[TenantContext] = Depends(get_tenant_context),
+) -> TenantContext:
+    if tenant is None:
+        raise HTTPException(status_code=401, detail="X-Tenant-ID header is required")
+    return tenant
