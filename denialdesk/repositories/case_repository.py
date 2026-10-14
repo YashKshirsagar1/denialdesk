@@ -1,10 +1,11 @@
+import json
 import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.models.case import AuditEvent, Batch, Case, CaseState, Diagnosis
+from denialdesk.models.case import AuditEvent, Batch, Case, CaseState, Diagnosis, Draft
 
 
 class CaseRepository:
@@ -135,3 +136,57 @@ class CaseRepository:
         await self._session.flush()
         await self._session.refresh(diagnosis)
         return diagnosis
+
+    async def save_draft(self, case_id: int, draft_result) -> Draft:
+        """Persist a Draft and transition Case to 'drafted' state (from approved or awaiting_human_review)."""
+        from denialdesk.templates.payer_templates import DraftType
+
+        # Determine next version for this draft type
+        existing = await self.get_drafts(case_id)
+        same_type = [d for d in existing if d.type == draft_result.draft_type.value]
+        version = (max((d.version for d in same_type), default=0) + 1)
+
+        draft = Draft(
+            case_id=case_id,
+            type=draft_result.draft_type.value,
+            content=draft_result.content,
+            attachments=json.dumps(draft_result.attachments),
+            version=version,
+        )
+        self._session.add(draft)
+        await self._session.flush()
+
+        case = await self.get_case(case_id)
+        if case is None:
+            raise ValueError(f"Case {case_id} not found")
+
+        if case.state in (CaseState.approved, CaseState.awaiting_human_review):
+            event = case.transition(
+                CaseState.drafted,
+                actor="drafting_agent",
+                action_note=f"drafted {draft_result.draft_type.value}",
+            )
+            self._session.add(event)
+            await self._session.flush()
+
+        await self._session.refresh(draft)
+        return draft
+
+    async def get_drafts(self, case_id: int) -> list[Draft]:
+        stmt = (
+            select(Draft)
+            .where(Draft.case_id == case_id)
+            .order_by(Draft.version.desc())
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_latest_draft(self, case_id: int, draft_type_value: str) -> Draft | None:
+        stmt = (
+            select(Draft)
+            .where(Draft.case_id == case_id, Draft.type == draft_type_value)
+            .order_by(Draft.version.desc())
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
