@@ -1,0 +1,17 @@
+CARC_DESCRIPTIONS: dict[str, str] = {
+    "4": "The service/supply is not covered by the plan.",
+    "11": "The diagnosis is inconsistent with the procedure.",
+    "16": "Claim/service lacks information or has submission/billing error(s). Usage: Do not use this code for claim denial; use only for information requests. Do not use this code if the claim is denied based on a specific reason code.",
+    "18": "Exact duplicate claim/service (Use only with Group Code OA except where state workers' compensation regulations require CO).",
+    "22": "This care may be covered by another payer per coordination of benefits.",
+    "29": "The time limit for filing has expired.",
+    "45": "Charges exceed your contracted/legislated fee arrangement.",
+    "50": "These are non-covered services because this is not deemed a 'medical necessity' by the payer.",
+    "96": "Non-covered charge(s). At least one Remark Code must be provided.",
+    "97": "The benefit for this service is included in the payment/allowance for another service/procedure that has already been adjudicated.",
+    "167": "This (these) diagnosis(es) is (are) not covered.",
+    "170": "Payment is denied when performed/billed by this type of provider.",
+    "171": "Payment is denied for services/charges by the rendering provider.",
+    "172": "Claim/service denied because procedure/treatment is deemed experimental/investigational by the payer.",
+    "197": "Precertification/authorization/notification/pre-treatment absent.",
+}

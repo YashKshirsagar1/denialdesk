@@ -17,6 +17,8 @@ env/
 
 # Data (synthetic only — never commit real PHI)
 data/*.json
+# But eval cases are hand-authored labeled data, not PHI
+!data/eval_cases.json
 
 # Alembic
 alembic/versions/*.py

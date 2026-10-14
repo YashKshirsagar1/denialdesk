@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.models.case import AuditEvent, Batch, Case, CaseState
+from denialdesk.models.case import AuditEvent, Batch, Case, CaseState, Diagnosis
 
 
 class CaseRepository:
@@ -116,3 +116,22 @@ class CaseRepository:
         await self._session.refresh(case)
         await self._session.refresh(event)
         return case, event
+
+    async def save_diagnosis(self, diagnosis: Diagnosis) -> Diagnosis:
+        """Persist a Diagnosis and transition the associated Case to 'diagnosed' state."""
+        self._session.add(diagnosis)
+        await self._session.flush()
+
+        case = await self.get_case(diagnosis.case_id)
+        if case is None:
+            raise ValueError(f"Case {diagnosis.case_id} not found")
+
+        event = case.transition(
+            CaseState.diagnosed,
+            actor="diagnosis_agent",
+            action_note=f"root_cause={diagnosis.root_cause}, score={diagnosis.winnability_score:.2f}",
+        )
+        self._session.add(event)
+        await self._session.flush()
+        await self._session.refresh(diagnosis)
+        return diagnosis
