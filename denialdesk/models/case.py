@@ -257,6 +257,28 @@ class DocumentRequest(Base):
     case: Mapped["Case"] = relationship("Case", back_populates="document_requests")
 
 
+class AccessLog(Base):
+    """Records every HTTP access to PHI-bearing routes — reads included.
+
+    actor_email is stored as SHA-256 hex — never plain text.
+    resource is always an ID reference ("case:42", "queue") — never contains PHI.
+    Separate from AuditEvent which tracks state-machine transitions.
+    """
+    __tablename__ = "access_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("practices.id"), nullable=True, index=True)
+    actor_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Stored as SHA-256 hex — not reversible; derivable from auth context if needed.
+    actor_email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    actor_role: Mapped[str] = mapped_column(String(50), nullable=False)
+    resource: Mapped[str] = mapped_column(String(200), nullable=False)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)  # read | create | update | delete
+    http_method: Mapped[str] = mapped_column(String(10), nullable=False)
+    path: Mapped[str] = mapped_column(String(500), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 

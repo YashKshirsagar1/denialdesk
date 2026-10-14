@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from denialdesk.api.main import app
 from denialdesk.api import deps
 from denialdesk.auth.models import Role, UserClaims
-from denialdesk.models.case import AuditEvent, Base, Batch, Case, CaseState, Diagnosis, Draft, Practice
+from denialdesk.models.case import AccessLog, AuditEvent, Base, Batch, Case, CaseState, Diagnosis, Draft, Practice
 
 
 @pytest.fixture(autouse=True)

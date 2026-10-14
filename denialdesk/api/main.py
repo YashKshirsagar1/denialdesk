@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from denialdesk.api.middleware.access_log import AccessLogMiddleware
 from denialdesk.api.routers import auth, cases, clinic, document_requests, kpis, ops, outcomes, queue, reviews, upload
+from denialdesk.logging import configure_phi_safe_logging
+
+configure_phi_safe_logging()
 
 app = FastAPI(title="DenialDesk", version="0.1.0")
 
@@ -11,6 +15,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(AccessLogMiddleware)
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(upload.router, prefix="/api")

@@ -164,3 +164,14 @@ export interface ClinicDashboard {
   cases_declined: number;
   total_cases: number;
 }
+
+export interface AccessLogEntry {
+  id: number;
+  actor_id: string;
+  actor_role: string;
+  resource: string;
+  action: string;
+  http_method: string;
+  path: string;
+  timestamp: string;
+}

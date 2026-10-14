@@ -1,13 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.api.deps import get_session, require_auth
+from denialdesk.api.deps import get_session, require_role
 from denialdesk.api.schemas.case import ClinicDashboard
-from denialdesk.auth.models import UserClaims
-from denialdesk.models.case import Case, CaseState, Outcome
+from denialdesk.auth.models import Role, UserClaims
+from denialdesk.models.case import AccessLog, Case, CaseState, Outcome
 
 router = APIRouter(prefix="/clinic", tags=["clinic"])
+
+class AccessLogEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    actor_id: str
+    actor_role: str
+    resource: str
+    action: str
+    http_method: str
+    path: str
+    timestamp: datetime
+
 
 _IN_PROGRESS_STATES = {
     CaseState.ingested,
@@ -22,10 +39,36 @@ _IN_PROGRESS_STATES = {
 }
 
 
+@router.get("/access-log", response_model=list[AccessLogEntry])
+async def get_access_log(
+    tenant_id: Optional[int] = Query(default=None, description="Filter by tenant (ops_admin only)"),
+    limit: int = Query(default=200, le=500),
+    session: AsyncSession = Depends(get_session),
+    user: UserClaims = Depends(require_role(Role.clinic_admin, Role.ops_admin)),
+):
+    """Return access log entries scoped to the caller's tenant.
+
+    clinic_admin: sees only their own tenant's log.
+    ops_admin: sees all tenants, optionally filtered by ?tenant_id=N.
+    actor_email is not returned (it's a one-way hash stored for audit purposes).
+    """
+    stmt = select(AccessLog).order_by(AccessLog.timestamp.desc()).limit(limit)
+
+    if user.role == Role.clinic_admin:
+        if user.tenant_id is None:
+            return []
+        stmt = stmt.where(AccessLog.tenant_id == user.tenant_id)
+    elif tenant_id is not None:
+        stmt = stmt.where(AccessLog.tenant_id == tenant_id)
+
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
 @router.get("/dashboard", response_model=ClinicDashboard)
 async def get_clinic_dashboard(
     session: AsyncSession = Depends(get_session),
-    user: UserClaims = Depends(require_auth),
+    user: UserClaims = Depends(require_role(Role.clinic_admin, Role.clinic_staff, Role.ops_admin)),
 ):
     """Clinic-scoped dashboard: dollars submitted, recovered, cases in progress.
 

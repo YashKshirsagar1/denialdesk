@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { getAllCases, getClinicDashboard, getCaseDetail, getDocumentRequests, fulfillDocumentRequest } from '../api'
-import { clearToken } from '../auth'
+import { getAllCases, getClinicDashboard, getCaseDetail, getDocumentRequests, fulfillDocumentRequest, getAccessLog } from '../api'
+import { clearToken, getCurrentUser } from '../auth'
 import { formatCaseStatus, statusColor } from '../lib/caseStatus'
 import { UploadForm } from './UploadForm'
-import type { ClinicCaseSummary, ClinicDashboard, CaseDetail, DocumentRequest } from '../types'
+import type { ClinicCaseSummary, ClinicDashboard, CaseDetail, DocumentRequest, AccessLogEntry } from '../types'
 
-type Tab = 'upload' | 'claims' | 'dashboard' | 'requests'
+type Tab = 'upload' | 'claims' | 'dashboard' | 'requests' | 'access-log'
 
 const tabBtn = (active: boolean): React.CSSProperties => ({
   padding: '8px 20px',
@@ -42,16 +42,21 @@ interface Props {
 }
 
 export function ClinicPortal({ onLogout }: Props) {
+  const currentUser = getCurrentUser()
+  const isAdmin = currentUser?.role === 'clinic_admin'
+
   const [activeTab, setActiveTab] = useState<Tab>('claims')
   const [cases, setCases] = useState<ClinicCaseSummary[]>([])
   const [dashboard, setDashboard] = useState<ClinicDashboard | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [expandedDetail, setExpandedDetail] = useState<CaseDetail | null>(null)
   const [docRequests, setDocRequests] = useState<DocumentRequest[]>([])
+  const [accessLog, setAccessLog] = useState<AccessLogEntry[]>([])
   const [loadingCases, setLoadingCases] = useState(false)
   const [loadingDash, setLoadingDash] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [loadingReqs, setLoadingReqs] = useState(false)
+  const [loadingLog, setLoadingLog] = useState(false)
   const [fulfillingId, setFulfillingId] = useState<number | null>(null)
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
   const [error, setError] = useState<string | null>(null)
@@ -111,12 +116,28 @@ export function ClinicPortal({ onLogout }: Props) {
     loadCases()
   }, [])
 
+  async function loadAccessLog() {
+    setLoadingLog(true)
+    setError(null)
+    try {
+      const data = await getAccessLog()
+      setAccessLog(data)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setLoadingLog(false)
+    }
+  }
+
   useEffect(() => {
     if (activeTab === 'dashboard' && dashboard === null) {
       loadDashboard()
     }
     if (activeTab === 'requests') {
       loadDocRequests()
+    }
+    if (activeTab === 'access-log') {
+      loadAccessLog()
     }
   }, [activeTab])
 
@@ -162,6 +183,11 @@ export function ClinicPortal({ onLogout }: Props) {
             </span>
           )}
         </button>
+        {isAdmin && (
+          <button style={tabBtn(activeTab === 'access-log')} onClick={() => setActiveTab('access-log')}>
+            Access Log
+          </button>
+        )}
         <div style={{ marginLeft: 'auto' }}>
           <button
             onClick={onLogout}
@@ -388,6 +414,76 @@ export function ClinicPortal({ onLogout }: Props) {
           </div>
         )}
 
+        {/* Access Log tab — clinic_admin only */}
+        {activeTab === 'access-log' && isAdmin && (
+          <div style={{ padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 18 }}>Access Log</h2>
+              <button
+                onClick={loadAccessLog}
+                style={{ padding: '4px 12px', fontSize: 12, background: 'none', border: '1px solid #ced4da', borderRadius: 4, cursor: 'pointer', color: '#6c757d' }}
+              >
+                Refresh
+              </button>
+            </div>
+            <p style={{ fontSize: 12, color: '#6c757d', marginTop: 0, marginBottom: 16 }}>
+              All accesses to your practice's data — reads included. Required for HIPAA compliance.
+            </p>
+
+            {loadingLog && <div style={{ color: '#6c757d' }}>Loading...</div>}
+
+            {!loadingLog && accessLog.length === 0 && (
+              <div style={{ color: '#6c757d', textAlign: 'center', padding: '40px 0' }}>
+                No access events recorded yet.
+              </div>
+            )}
+
+            {!loadingLog && accessLog.length > 0 && (
+              <div style={{ background: '#fff', border: '1px solid #dee2e6', borderRadius: 8, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #dee2e6' }}>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600, color: '#6c757d' }}>Timestamp</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600, color: '#6c757d' }}>Who</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600, color: '#6c757d' }}>Role</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600, color: '#6c757d' }}>What</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600, color: '#6c757d' }}>Action</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600, color: '#6c757d' }}>Endpoint</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accessLog.map((entry, i) => (
+                      <tr key={entry.id} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                        <td style={{ padding: '7px 12px', color: '#6c757d' }}>
+                          {new Date(entry.timestamp).toLocaleString()}
+                        </td>
+                        <td style={{ padding: '7px 12px', fontFamily: 'monospace', fontSize: 11 }}>{entry.actor_id}</td>
+                        <td style={{ padding: '7px 12px' }}>
+                          <span style={{ background: '#e9ecef', borderRadius: 3, padding: '1px 6px', fontSize: 11 }}>
+                            {entry.actor_role}
+                          </span>
+                        </td>
+                        <td style={{ padding: '7px 12px', fontFamily: 'monospace', fontSize: 11 }}>{entry.resource}</td>
+                        <td style={{ padding: '7px 12px' }}>
+                          <span style={{
+                            background: entry.action === 'read' ? '#e8f4fd' : '#fff3cd',
+                            color: entry.action === 'read' ? '#0c63e4' : '#856404',
+                            borderRadius: 3,
+                            padding: '1px 6px',
+                            fontSize: 11,
+                          }}>
+                            {entry.action}
+                          </span>
+                        </td>
+                        <td style={{ padding: '7px 12px', color: '#6c757d', fontFamily: 'monospace', fontSize: 11 }}>{entry.path}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

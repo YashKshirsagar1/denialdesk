@@ -1,5 +1,5 @@
 import { authHeaders } from './auth'
-import type { CaseDetail, ClinicCaseSummary, ClinicDashboard, CaseSummary, DeadlineItem, DocumentRequest, OverviewKPIs, PipelineView, ReviewRequest, ReviewResponse, ScoreAccuracy, WinRateTable } from './types'
+import type { AccessLogEntry, CaseDetail, ClinicCaseSummary, ClinicDashboard, CaseSummary, DeadlineItem, DocumentRequest, OverviewKPIs, PipelineView, ReviewRequest, ReviewResponse, ScoreAccuracy, WinRateTable } from './types'
 
 const BASE = '/api'
 
@@ -60,6 +60,11 @@ export function getDeadlines(): Promise<DeadlineItem[]> {
 
 export function getDocumentRequests(): Promise<DocumentRequest[]> {
   return apiFetch<DocumentRequest[]>('/document-requests')
+}
+
+export function getAccessLog(tenantId?: number): Promise<AccessLogEntry[]> {
+  const params = tenantId !== undefined ? `?tenant_id=${tenantId}` : ''
+  return apiFetch<AccessLogEntry[]>(`/clinic/access-log${params}`)
 }
 
 export function fulfillDocumentRequest(reqId: number, file?: File): Promise<DocumentRequest> {
