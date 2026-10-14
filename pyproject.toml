@@ -15,6 +15,9 @@ dependencies = [
     "python-dotenv",
     "faker",
     "pdfplumber>=0.10",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart",
 ]
 
 [project.optional-dependencies]

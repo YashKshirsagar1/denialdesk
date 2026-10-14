@@ -43,11 +43,14 @@ def test_closed_state_is_terminal():
         case.transition(CaseState.ingested)
 
 
-def test_transition_appends_audit_event():
+def test_transition_returns_audit_event():
     case = _make_case(CaseState.ingested)
-    case.transition(CaseState.diagnosed)
-    case.transition(CaseState.approved)
-    assert len(case.audit_events) == 2
+    event1 = case.transition(CaseState.diagnosed)
+    event2 = case.transition(CaseState.approved)
+    assert isinstance(event1, AuditEvent)
+    assert isinstance(event2, AuditEvent)
+    assert "ingested->diagnosed" in event1.action
+    assert "diagnosed->approved" in event2.action
 
 
 def test_all_models_have_timestamps():
