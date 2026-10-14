@@ -137,13 +137,18 @@ async def get_case_drafts(
     return [DraftSchema.from_orm_draft(d) for d in sorted(case.drafts, key=lambda d: d.version, reverse=True)]
 
 
-async def _load_case_for_packet(case_id: int, session: AsyncSession) -> tuple[Case, Diagnosis | None]:
-    """Load case + diagnosis; raise 404 if not found."""
+async def _load_case_for_packet(
+    case_id: int, session: AsyncSession, user: UserClaims
+) -> tuple[Case, Diagnosis | None]:
+    """Load case + diagnosis; raise 404 if not found or not accessible by this user."""
     stmt = (
         select(Case)
         .options(selectinload(Case.diagnosis), selectinload(Case.drafts))
         .where(Case.id == case_id)
     )
+    tenant_ctx = user.to_tenant_context()
+    if tenant_ctx is not None:
+        stmt = stmt.where(Case.tenant_id == tenant_ctx.tenant_id)
     result = await session.execute(stmt)
     case = result.scalar_one_or_none()
     if case is None:
@@ -171,9 +176,9 @@ def _pick_call_packet_draft(case: Case):
 async def get_appeal_pdf(
     case_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: UserClaims = Depends(require_auth),
+    user: UserClaims = Depends(require_auth),
 ):
-    case, diagnosis = await _load_case_for_packet(case_id, session)
+    case, diagnosis = await _load_case_for_packet(case_id, session, user)
     draft = _pick_appeal_draft(case)
     if draft is None:
         raise HTTPException(status_code=404, detail="No appeal draft found for this case")
@@ -190,9 +195,9 @@ async def get_appeal_pdf(
 async def get_call_packet_pdf(
     case_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: UserClaims = Depends(require_auth),
+    user: UserClaims = Depends(require_auth),
 ):
-    case, diagnosis = await _load_case_for_packet(case_id, session)
+    case, diagnosis = await _load_case_for_packet(case_id, session, user)
     draft = _pick_call_packet_draft(case) or _pick_appeal_draft(case)
     if draft is None:
         raise HTTPException(status_code=404, detail="No draft found for this case")
@@ -209,9 +214,9 @@ async def get_call_packet_pdf(
 async def get_attachments(
     case_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: UserClaims = Depends(require_auth),
+    user: UserClaims = Depends(require_auth),
 ):
-    case, _ = await _load_case_for_packet(case_id, session)
+    case, _ = await _load_case_for_packet(case_id, session, user)
     draft = _pick_appeal_draft(case)
     if draft is None:
         return {"case_id": str(case_id), "attachments": []}

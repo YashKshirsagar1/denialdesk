@@ -16,5 +16,9 @@ class Settings(BaseSettings):
     auth0_domain: str = ""
     auth0_audience: str = ""
 
+    # CORS — restrict in production. Comma-separated list of allowed origins.
+    # Dev default: localhost only. Prod: set to the actual frontend domain.
+    cors_allowed_origins: str = "http://localhost:5173,http://localhost:3000"
+
 
 settings = Settings()

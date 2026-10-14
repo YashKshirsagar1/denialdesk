@@ -17,6 +17,7 @@ router = APIRouter(tags=["upload"])
 logger = logging.getLogger(__name__)
 
 _upload_roles = require_role(Role.clinic_admin, Role.clinic_staff, Role.ops_admin)
+_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 
 class UploadResponse(BaseModel):
@@ -62,6 +63,8 @@ async def upload_file(
         raise HTTPException(status_code=404, detail=f"Practice {practice_id} not found")
 
     content = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Maximum upload size is 50 MB.")
     filename = file.filename or "upload"
 
     try:

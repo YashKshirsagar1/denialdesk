@@ -78,7 +78,7 @@ async def verify_outcome(
     case_id: int,
     body: VerifyRequest,
     session: AsyncSession = Depends(get_session),
-    _user: UserClaims = Depends(require_role(Role.clinic_admin, Role.reviewer, Role.ops_admin)),
+    user: UserClaims = Depends(require_role(Role.clinic_admin, Role.reviewer, Role.ops_admin)),
 ):
     outcome = await CaseRepository(session).get_outcome(case_id)
     if outcome is None:
@@ -88,6 +88,10 @@ async def verify_outcome(
     case = await session.get(Case, case_id)
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
+
+    # Enforce tenant scoping for clinic roles
+    if not user.is_ops and user.tenant_id is not None and case.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     # Load practice for fee config
     practice = await session.get(Practice, case.tenant_id) if case.tenant_id else None
@@ -119,7 +123,10 @@ async def verify_outcome(
 
 
 @router.get("/outcomes/summary", response_model=OutcomeSummary)
-async def outcomes_summary(session: AsyncSession = Depends(get_session)):
+async def outcomes_summary(
+    session: AsyncSession = Depends(get_session),
+    _user: UserClaims = Depends(require_role(Role.reviewer, Role.ops_admin)),
+):
     result = await session.execute(select(Outcome))
     outcomes = result.scalars().all()
     total = len(outcomes)

@@ -3,17 +3,20 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from denialdesk.api.middleware.access_log import AccessLogMiddleware
 from denialdesk.api.routers import auth, cases, clinic, document_requests, kpis, onboarding, ops, outcomes, queue, reviews, statements, upload
+from denialdesk.config import settings
 from denialdesk.logging import configure_phi_safe_logging
 
 configure_phi_safe_logging()
 
 app = FastAPI(title="DenialDesk", version="0.1.0")
 
+_cors_origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Tenant-ID"],
+    allow_credentials=True,
 )
 app.add_middleware(AccessLogMiddleware)
 

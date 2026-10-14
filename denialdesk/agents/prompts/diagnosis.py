@@ -49,6 +49,6 @@ Billed Amount: ${billed_amt:.2f}
 Denial Date: {denial_date}
 Filing Deadline for Appeal: {filing_deadline}
 
-Today's Date: 2026-10-14
+Today's Date: {__import__('datetime').date.today().isoformat()}
 
 Based on the CARC/RARC codes and claim details, provide your diagnosis as JSON."""

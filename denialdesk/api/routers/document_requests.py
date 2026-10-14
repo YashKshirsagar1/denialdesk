@@ -13,6 +13,7 @@ from denialdesk.models.case import Case, DocumentRequest, DocumentRequestStatus
 router = APIRouter(tags=["document-requests"])
 
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "uploads")
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB for document fulfillments
 
 
 def _ensure_uploads_dir() -> None:
@@ -98,6 +99,8 @@ async def fulfill_document_request(
         safe_name = os.path.basename(file.filename or "upload")
         dest = os.path.join(UPLOADS_DIR, f"{req_id}_{safe_name}")
         content = await file.read()
+        if len(content) > _MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="File too large. Maximum size is 20 MB.")
         with open(dest, "wb") as fh:
             fh.write(content)
         file_path = dest  # prod: replace with private S3 key
