@@ -21,6 +21,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "httpx",
+    "aiosqlite",
 ]
 
 [tool.hatch.build.targets.wheel]

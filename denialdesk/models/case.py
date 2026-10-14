@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime, timezone
-from typing import Optional
+from typing import ClassVar, Optional
 
 from sqlalchemy import (
     DateTime,
@@ -36,23 +36,6 @@ class CaseState(str, enum.Enum):
     re_denied = "re_denied"
     escalated = "escalated"
     closed = "closed"
-
-
-# Legal transitions from each state
-_TRANSITIONS: dict[CaseState, set[CaseState]] = {
-    CaseState.ingested: {CaseState.diagnosed},
-    CaseState.diagnosed: {CaseState.declined, CaseState.approved},
-    CaseState.declined: {CaseState.closed},
-    CaseState.approved: {CaseState.drafted},
-    CaseState.drafted: {CaseState.awaiting_human_review},
-    CaseState.awaiting_human_review: {CaseState.submitted, CaseState.drafted},
-    CaseState.submitted: {CaseState.pending_payer},
-    CaseState.pending_payer: {CaseState.paid, CaseState.re_denied, CaseState.closed},
-    CaseState.paid: {CaseState.closed},
-    CaseState.re_denied: {CaseState.escalated, CaseState.drafted, CaseState.closed},
-    CaseState.escalated: {CaseState.submitted, CaseState.closed},
-    CaseState.closed: set(),
-}
 
 
 class TimestampMixin:
@@ -94,6 +77,21 @@ class Batch(TimestampMixin, Base):
 class Case(TimestampMixin, Base):
     __tablename__ = "cases"
 
+    VALID_TRANSITIONS: ClassVar[dict[CaseState, list[CaseState]]] = {
+        CaseState.ingested:              [CaseState.diagnosed],
+        CaseState.diagnosed:             [CaseState.declined, CaseState.approved],
+        CaseState.declined:              [CaseState.closed],
+        CaseState.approved:              [CaseState.drafted],
+        CaseState.drafted:               [CaseState.awaiting_human_review],
+        CaseState.awaiting_human_review: [CaseState.submitted, CaseState.drafted],
+        CaseState.submitted:             [CaseState.pending_payer],
+        CaseState.pending_payer:         [CaseState.paid, CaseState.re_denied],
+        CaseState.paid:                  [CaseState.closed],
+        CaseState.re_denied:             [CaseState.escalated, CaseState.closed],
+        CaseState.escalated:             [CaseState.pending_payer, CaseState.closed],
+        CaseState.closed:                [],
+    }
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     batch_id: Mapped[int] = mapped_column(ForeignKey("batches.id"), nullable=False)
     payer: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -118,8 +116,12 @@ class Case(TimestampMixin, Base):
     outcome: Mapped[Optional["Outcome"]] = relationship("Outcome", back_populates="case", uselist=False)
     audit_events: Mapped[list["AuditEvent"]] = relationship("AuditEvent", back_populates="case")
 
-    def transition(self, new_state: CaseState, actor: str = "system") -> "AuditEvent":
-        allowed = _TRANSITIONS.get(self.state, set())
+    @property
+    def is_terminal(self) -> bool:
+        return self.state in (CaseState.closed, CaseState.paid, CaseState.declined)
+
+    def transition(self, new_state: CaseState, actor: str = "system", action_note: str = "") -> "AuditEvent":
+        allowed = self.VALID_TRANSITIONS.get(self.state, [])
         if new_state not in allowed:
             raise ValueError(
                 f"Invalid transition: {self.state.value} -> {new_state.value}. "
@@ -128,15 +130,16 @@ class Case(TimestampMixin, Base):
         old_state = self.state
         self.state = new_state
         self.updated_at = _utcnow()
-        event = AuditEvent(
+        action = f"state_transition:{old_state.value}->{new_state.value}"
+        if action_note:
+            action = f"{action} | {action_note}"
+        return AuditEvent(
             case_id=self.id,
             actor=actor,
-            action=f"state_transition:{old_state.value}->{new_state.value}",
+            action=action,
             inputs_hash=None,
             timestamp=_utcnow(),
         )
-        self.audit_events.append(event)
-        return event
 
 
 class Diagnosis(TimestampMixin, Base):
