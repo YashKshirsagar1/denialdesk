@@ -54,6 +54,7 @@ class CaseSummary(BaseModel):
     winnability_score: float | None
     root_cause: str | None
     created_at: datetime
+    practice_name: str | None = None
 
     model_config = {"from_attributes": True}
 

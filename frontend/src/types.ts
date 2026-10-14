@@ -27,6 +27,20 @@ export interface CaseSummary {
   winnability_score: number | null;
   root_cause: string | null;
   created_at: string;
+  practice_name: string | null;
+}
+
+export interface DeadlineItem {
+  case_id: number;
+  practice_name: string | null;
+  payer: string;
+  patient_ref: string | null;
+  cpt: string;
+  billed_amt: number;
+  state: string;
+  filing_deadline: string;
+  days_until_deadline: number;
+  urgency: 'overdue' | 'critical' | 'warning' | 'upcoming' | 'ok';
 }
 
 export interface CaseDetail extends CaseSummary {

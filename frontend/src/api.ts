@@ -1,5 +1,5 @@
 import { authHeaders } from './auth'
-import type { CaseDetail, ClinicCaseSummary, ClinicDashboard, CaseSummary, DocumentRequest, OverviewKPIs, PipelineView, ReviewRequest, ReviewResponse, ScoreAccuracy, WinRateTable } from './types'
+import type { CaseDetail, ClinicCaseSummary, ClinicDashboard, CaseSummary, DeadlineItem, DocumentRequest, OverviewKPIs, PipelineView, ReviewRequest, ReviewResponse, ScoreAccuracy, WinRateTable } from './types'
 
 const BASE = '/api'
 
@@ -52,6 +52,10 @@ export function getAllCases(limit = 100, offset = 0): Promise<ClinicCaseSummary[
 
 export function getClinicDashboard(): Promise<ClinicDashboard> {
   return apiFetch<ClinicDashboard>('/clinic/dashboard')
+}
+
+export function getDeadlines(): Promise<DeadlineItem[]> {
+  return apiFetch<DeadlineItem[]>('/ops/deadlines')
 }
 
 export function getDocumentRequests(): Promise<DocumentRequest[]> {

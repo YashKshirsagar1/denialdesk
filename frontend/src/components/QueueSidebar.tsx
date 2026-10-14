@@ -58,6 +58,11 @@ export function QueueSidebar({ cases, selectedId, onSelect }: Props) {
             </span>
             <StatusBadge state={c.state} />
           </div>
+          {c.practice_name && (
+            <div style={{ fontSize: 11, color: '#6c757d', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {c.practice_name}
+            </div>
+          )}
           <div style={{ fontSize: 12, color: '#495057', marginBottom: 4 }}>
             CPT {c.cpt} · CARC {c.carc} · ${c.billed_amt.toLocaleString()}
           </div>

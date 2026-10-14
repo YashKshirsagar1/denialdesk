@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from denialdesk.api.deps import get_session, require_auth
 from denialdesk.api.schemas.case import CaseSummary, QueueStats
 from denialdesk.auth.models import UserClaims
-from denialdesk.models.case import Case, CaseState, Diagnosis
+from denialdesk.models.case import Case, CaseState, Diagnosis, Practice
 
 router = APIRouter()
 
@@ -58,8 +58,9 @@ async def list_queue_cases(
             pass
 
     stmt = (
-        select(Case, Diagnosis)
+        select(Case, Diagnosis, Practice)
         .outerjoin(Diagnosis, Diagnosis.case_id == Case.id)
+        .outerjoin(Practice, Practice.id == Case.tenant_id)
         .where(Case.state.in_(state_enums))
         .order_by(Case.created_at.desc())
         .limit(limit)
@@ -72,7 +73,7 @@ async def list_queue_cases(
     rows = result.all()
 
     summaries = []
-    for case, diag in rows:
+    for case, diag, practice in rows:
         summaries.append(
             CaseSummary(
                 id=case.id,
@@ -85,6 +86,7 @@ async def list_queue_cases(
                 winnability_score=diag.winnability_score if diag else None,
                 root_cause=diag.root_cause if diag else None,
                 created_at=case.created_at,
+                practice_name=practice.name if practice else None,
             )
         )
     return summaries

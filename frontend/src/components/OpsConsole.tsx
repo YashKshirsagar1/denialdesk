@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
-import { getCaseDetail, getQueueCases } from '../api'
+import { getCaseDetail, getDeadlines, getQueueCases } from '../api'
 import { clearToken } from '../auth'
 import { CaseDetailPanel } from './CaseDetail'
 import { Dashboard } from './Dashboard'
+import { DeadlineView } from './DeadlineView'
 import { DraftEditor } from './DraftEditor'
 import { OutcomeForm } from './OutcomeForm'
 import { QueueSidebar } from './QueueSidebar'
 import { ReviewPanel } from './ReviewPanel'
 import { UploadForm } from './UploadForm'
-import type { CaseDetail, CaseSummary, DraftInfo } from '../types'
+import type { CaseDetail, CaseSummary, DeadlineItem, DraftInfo } from '../types'
 
-type Tab = 'upload' | 'queue' | 'dashboard'
+type Tab = 'upload' | 'queue' | 'deadlines' | 'dashboard'
 
 const tabBtn = (active: boolean): React.CSSProperties => ({
   padding: '8px 20px',
@@ -30,6 +31,7 @@ interface Props {
 export function OpsConsole({ onLogout }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('upload')
   const [cases, setCases] = useState<CaseSummary[]>([])
+  const [deadlines, setDeadlines] = useState<DeadlineItem[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [detail, setDetail] = useState<CaseDetail | null>(null)
   const [editedContent, setEditedContent] = useState('')
@@ -45,8 +47,18 @@ export function OpsConsole({ onLogout }: Props) {
     }
   }
 
+  async function loadDeadlines() {
+    try {
+      const data = await getDeadlines()
+      setDeadlines(data)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
   useEffect(() => {
     loadQueue()
+    loadDeadlines()
   }, [])
 
   async function selectCase(id: number) {
@@ -85,6 +97,17 @@ export function OpsConsole({ onLogout }: Props) {
         <span style={{ fontSize: 11, color: '#6c757d', marginRight: 20, padding: '2px 8px', background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: 3 }}>Ops</span>
         <button style={tabBtn(activeTab === 'upload')} onClick={() => setActiveTab('upload')}>Upload</button>
         <button style={tabBtn(activeTab === 'queue')} onClick={() => setActiveTab('queue')}>Review Queue</button>
+        <button style={tabBtn(activeTab === 'deadlines')} onClick={() => setActiveTab('deadlines')}>
+          Deadlines
+          {(() => {
+            const urgent = deadlines.filter(d => d.urgency === 'overdue' || d.urgency === 'critical').length
+            return urgent > 0 ? (
+              <span style={{ marginLeft: 6, background: '#dc3545', color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: 11, fontWeight: 700 }}>
+                {urgent}
+              </span>
+            ) : null
+          })()}
+        </button>
         <button style={tabBtn(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
         <div style={{ marginLeft: 'auto' }}>
           <button
@@ -103,6 +126,10 @@ export function OpsConsole({ onLogout }: Props) {
       ) : activeTab === 'dashboard' ? (
         <div style={{ flex: 1, overflowY: 'auto', background: '#f8f9fa' }}>
           <Dashboard />
+        </div>
+      ) : activeTab === 'deadlines' ? (
+        <div style={{ flex: 1, overflowY: 'auto', background: '#f8f9fa' }}>
+          <DeadlineView deadlines={deadlines} />
         </div>
       ) : (
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
