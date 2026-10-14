@@ -20,6 +20,7 @@ from denialdesk.models.case import (
     CaseState,
     Diagnosis,
     Draft,
+    Outcome,
     Practice,
 )
 
@@ -190,11 +191,88 @@ def seed(db_path: str, count: int) -> None:
 
         session.commit()
 
+    # Seed outcomes on some cases — mix of paid, denied, partially_paid
+    import random as _rnd
+    _rnd.seed(99)
+
+    outcome_plan = (
+        [("paid", 800)] * 3
+        + [("paid", 1400)] * 2
+        + [("paid", 500)] * 1
+        + [("partially_paid", 300)] * 2
+        + [("partially_paid", 150)] * 1
+        + [("denied", 0)] * 4
+    )
+    # Leave last 2 cases with no outcome (still awaiting_human_review state)
+    outcome_plan = outcome_plan[: max(0, len(raw_cases) - 2)]
+
+    with Session(engine) as session:
+        all_cases = session.execute(
+            __import__("sqlalchemy").text("SELECT id FROM cases ORDER BY id")
+        ).fetchall()
+        case_ids = [row[0] for row in all_cases]
+
+        outcomes_added = 0
+        for i, (result, amount) in enumerate(outcome_plan):
+            if i >= len(case_ids):
+                break
+            cid = case_ids[i]
+            case = session.get(Case, cid)
+            if case is None:
+                continue
+
+            # Advance state to submitted → pending_payer if still in awaiting_human_review
+            transitions_needed = []
+            if case.state == CaseState.awaiting_human_review:
+                transitions_needed = [CaseState.submitted, CaseState.pending_payer]
+            elif case.state == CaseState.drafted:
+                transitions_needed = [CaseState.awaiting_human_review, CaseState.submitted, CaseState.pending_payer]
+
+            for t in transitions_needed:
+                try:
+                    ev = case.transition(t, actor="seed_script")
+                    session.add(ev)
+                    session.flush()
+                except ValueError:
+                    break
+
+            if case.state != CaseState.pending_payer:
+                continue
+
+            paid_dt = datetime.now(timezone.utc) if result != "denied" else None
+            outcome = Outcome(
+                case_id=cid,
+                result=result,
+                amount_recovered=float(amount),
+                paid_date=paid_dt,
+                notes="seeded",
+            )
+            session.add(outcome)
+
+            if result != "denied":
+                try:
+                    ev = case.transition(CaseState.paid, actor="seed_script")
+                    session.add(ev)
+                except ValueError:
+                    pass
+            else:
+                try:
+                    ev = case.transition(CaseState.re_denied, actor="seed_script")
+                    session.add(ev)
+                except ValueError:
+                    pass
+
+            session.flush()
+            outcomes_added += 1
+
+        session.commit()
+
     print(f"\nSeeded {len(raw_cases)} cases into {db_path}")
     print(f"{'State':<30} {'Count':>5}")
     print("-" * 37)
     for state, cnt in sorted(states_count.items()):
         print(f"{state:<30} {cnt:>5}")
+    print(f"\nOutcomes seeded: {outcomes_added}")
     print(f"\nAPI dev config: DATABASE_URL=sqlite:///{db_path}")
 
 

@@ -59,3 +59,56 @@ export interface ReviewResponse {
   draft_id: number | null;
   message: string;
 }
+
+export interface OverviewKPIs {
+  total_cases: number;
+  total_attempted: number;
+  total_paid: number;
+  total_denied_final: number;
+  recovery_rate: number;
+  total_amount_billed: number;
+  total_amount_recovered: number;
+  avg_amount_recovered: number;
+  total_declined: number;
+  decline_rate: number;
+  avg_winnability_score: number;
+  avg_days_to_payment: number;
+  pipeline: Record<string, number>;
+}
+
+export interface WinRateRow {
+  payer: string;
+  reason_code: string;
+  specialty: string;
+  attempts: number;
+  wins: number;
+  win_rate: number;
+}
+
+export interface WinRateTable {
+  rows: WinRateRow[];
+  total_rows: number;
+}
+
+export interface ScoreAccuracyRow {
+  score_bucket: string;
+  count: number;
+  actual_win_rate: number;
+  avg_predicted_score: number;
+}
+
+export interface ScoreAccuracy {
+  rows: ScoreAccuracyRow[];
+  correlation_note: string;
+}
+
+export interface PipelineStage {
+  state: string;
+  count: number;
+  pct: number;
+}
+
+export interface PipelineView {
+  stages: PipelineStage[];
+  total: number;
+}

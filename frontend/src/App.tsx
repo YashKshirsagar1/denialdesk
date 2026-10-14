@@ -1,13 +1,28 @@
 import { useEffect, useState } from 'react';
 import { getCaseDetail, getQueueCases } from './api';
 import { CaseDetailPanel } from './components/CaseDetail';
+import { Dashboard } from './components/Dashboard';
 import { DraftEditor } from './components/DraftEditor';
 import { OutcomeForm } from './components/OutcomeForm';
 import { QueueSidebar } from './components/QueueSidebar';
 import { ReviewPanel } from './components/ReviewPanel';
 import type { CaseDetail, CaseSummary, DraftInfo } from './types';
 
+type Tab = 'queue' | 'dashboard';
+
+const tabBtn = (active: boolean): React.CSSProperties => ({
+  padding: '8px 20px',
+  background: 'none',
+  border: 'none',
+  borderBottom: active ? '2px solid #0d6efd' : '2px solid transparent',
+  fontWeight: active ? 700 : 400,
+  color: active ? '#0d6efd' : '#495057',
+  cursor: 'pointer',
+  fontSize: 14,
+});
+
 export default function App() {
+  const [activeTab, setActiveTab] = useState<Tab>('queue');
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<CaseDetail | null>(null);
@@ -56,65 +71,80 @@ export default function App() {
   const originalContent = appealDraft?.content ?? '';
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui, sans-serif', fontSize: 14, color: '#212529' }}>
-      <QueueSidebar cases={cases} selectedId={selectedId} onSelect={selectCase} />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'system-ui, sans-serif', fontSize: 14, color: '#212529' }}>
+      {/* Tab bar */}
+      <div style={{ borderBottom: '1px solid #dee2e6', padding: '0 16px', display: 'flex', alignItems: 'center', background: '#fff', flexShrink: 0 }}>
+        <span style={{ fontWeight: 700, fontSize: 15, marginRight: 24, color: '#212529' }}>DenialDesk</span>
+        <button style={tabBtn(activeTab === 'queue')} onClick={() => setActiveTab('queue')}>Review Queue</button>
+        <button style={tabBtn(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
+      </div>
 
-      <main style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-        {error && (
-          <div style={{ background: '#f8d7da', color: '#58151c', padding: '10px 14px', borderRadius: 4, marginBottom: 16 }}>
-            {error}
-          </div>
-        )}
+      {activeTab === 'dashboard' ? (
+        <div style={{ flex: 1, overflowY: 'auto', background: '#f8f9fa' }}>
+          <Dashboard />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          <QueueSidebar cases={cases} selectedId={selectedId} onSelect={selectCase} />
 
-        {!selectedId && (
-          <div style={{ color: '#6c757d', marginTop: 60, textAlign: 'center' }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>⬅</div>
-            Select a case from the queue to review
-          </div>
-        )}
-
-        {loading && <div style={{ color: '#6c757d' }}>Loading...</div>}
-
-        {detail && !loading && (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 18 }}>
-                Case #{detail.id} — {detail.payer}
-              </h2>
-            </div>
-
-            <CaseDetailPanel detail={detail} />
-
-            <DraftEditor
-              draft={appealDraft}
-              editedContent={editedContent}
-              onContentChange={setEditedContent}
-            />
-
-            {detail.state === 'awaiting_human_review' && (
-              <ReviewPanel
-                caseId={detail.id}
-                draft={appealDraft}
-                editedContent={editedContent}
-                originalContent={originalContent}
-                onReviewed={handleReviewed}
-              />
-            )}
-
-            {(detail.state === 'submitted' || detail.state === 'pending_payer') && (
-              <OutcomeForm caseId={detail.id} onOutcomeRecorded={handleReviewed} />
-            )}
-
-            {detail.state !== 'awaiting_human_review' &&
-             detail.state !== 'submitted' &&
-             detail.state !== 'pending_payer' && (
-              <div style={{ color: '#6c757d', fontSize: 13, padding: '10px 0' }}>
-                State: <strong>{detail.state}</strong> — no action required
+          <main style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+            {error && (
+              <div style={{ background: '#f8d7da', color: '#58151c', padding: '10px 14px', borderRadius: 4, marginBottom: 16 }}>
+                {error}
               </div>
             )}
-          </>
-        )}
-      </main>
+
+            {!selectedId && (
+              <div style={{ color: '#6c757d', marginTop: 60, textAlign: 'center' }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>⬅</div>
+                Select a case from the queue to review
+              </div>
+            )}
+
+            {loading && <div style={{ color: '#6c757d' }}>Loading...</div>}
+
+            {detail && !loading && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h2 style={{ margin: 0, fontSize: 18 }}>
+                    Case #{detail.id} — {detail.payer}
+                  </h2>
+                </div>
+
+                <CaseDetailPanel detail={detail} />
+
+                <DraftEditor
+                  draft={appealDraft}
+                  editedContent={editedContent}
+                  onContentChange={setEditedContent}
+                />
+
+                {detail.state === 'awaiting_human_review' && (
+                  <ReviewPanel
+                    caseId={detail.id}
+                    draft={appealDraft}
+                    editedContent={editedContent}
+                    originalContent={originalContent}
+                    onReviewed={handleReviewed}
+                  />
+                )}
+
+                {(detail.state === 'submitted' || detail.state === 'pending_payer') && (
+                  <OutcomeForm caseId={detail.id} onOutcomeRecorded={handleReviewed} />
+                )}
+
+                {detail.state !== 'awaiting_human_review' &&
+                 detail.state !== 'submitted' &&
+                 detail.state !== 'pending_payer' && (
+                  <div style={{ color: '#6c757d', fontSize: 13, padding: '10px 0' }}>
+                    State: <strong>{detail.state}</strong> — no action required
+                  </div>
+                )}
+              </>
+            )}
+          </main>
+        </div>
+      )}
     </div>
   );
 }

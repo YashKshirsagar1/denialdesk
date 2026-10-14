@@ -1,4 +1,4 @@
-import type { CaseDetail, CaseSummary, ReviewRequest, ReviewResponse } from './types';
+import type { CaseDetail, CaseSummary, OverviewKPIs, PipelineView, ReviewRequest, ReviewResponse, ScoreAccuracy, WinRateTable } from './types';
 
 const BASE = '/api';
 
@@ -27,4 +27,20 @@ export function submitReview(id: number, req: ReviewRequest): Promise<ReviewResp
     method: 'POST',
     body: JSON.stringify(req),
   });
+}
+
+export function getKpiOverview(): Promise<OverviewKPIs> {
+  return apiFetch<OverviewKPIs>('/kpis/overview');
+}
+
+export function getWinRates(minAttempts = 1): Promise<WinRateTable> {
+  return apiFetch<WinRateTable>(`/kpis/win-rates?min_attempts=${minAttempts}`);
+}
+
+export function getScoreAccuracy(): Promise<ScoreAccuracy> {
+  return apiFetch<ScoreAccuracy>('/kpis/score-accuracy');
+}
+
+export function getPipeline(): Promise<PipelineView> {
+  return apiFetch<PipelineView>('/kpis/pipeline');
 }
