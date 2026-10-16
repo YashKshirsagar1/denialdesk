@@ -8,12 +8,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from denialdesk.api.deps import get_session, require_auth
-from denialdesk.api.schemas.case import CaseDetail, ClinicCaseSummary, CaseSummary, DraftSchema
+from denialdesk.api.schemas.case import CaseDetail, ClinicCaseSummary, CaseSummary, DraftSchema, OutcomeInfo, TimelineEvent
 from denialdesk.auth.models import UserClaims
+from denialdesk.data.carc_descriptions import CARC_DESCRIPTIONS
 from denialdesk.export.packet_builder import PacketBuilder
-from denialdesk.models.case import Case, CaseState, Diagnosis
+from denialdesk.models.case import Case, CaseState, Diagnosis, Practice
 
 router = APIRouter()
+
+_AUTOMATED_ACTORS = {
+    "coordinator", "ingestion_pipeline", "system", "outcome_processor",
+    "diagnosis_agent", "drafting_agent", "tracking_agent", "seed_demo",
+}
+
+
+def _actor_label(actor: str) -> str:
+    """Map an audit actor to a label that's safe to show clinics (never a person's email)."""
+    if actor in _AUTOMATED_ACTORS:
+        return "DenialDesk AI"
+    if actor.startswith("clinic"):
+        return "Clinic"
+    return "DenialDesk team"
 
 
 @router.get("/cases", response_model=list[ClinicCaseSummary])
@@ -25,8 +40,9 @@ async def list_cases(
 ):
     """List all cases scoped to the JWT tenant. Used by the clinic portal."""
     stmt = (
-        select(Case, Diagnosis)
+        select(Case, Diagnosis, Practice.name)
         .outerjoin(Diagnosis, Diagnosis.case_id == Case.id)
+        .outerjoin(Practice, Practice.id == Case.tenant_id)
         .order_by(Case.updated_at.desc())
         .limit(limit)
         .offset(offset)
@@ -39,7 +55,7 @@ async def list_cases(
     rows = result.all()
 
     summaries = []
-    for case, diag in rows:
+    for case, diag, practice_name in rows:
         summaries.append(
             ClinicCaseSummary(
                 id=case.id,
@@ -54,6 +70,8 @@ async def list_cases(
                 winnability_score=diag.winnability_score if diag else None,
                 root_cause=diag.root_cause if diag else None,
                 updated_at=case.updated_at,
+                practice_name=practice_name,
+                filing_deadline=case.filing_deadline.date() if case.filing_deadline else None,
             )
         )
     return summaries
@@ -67,7 +85,12 @@ async def get_case(
 ):
     stmt = (
         select(Case)
-        .options(selectinload(Case.diagnosis), selectinload(Case.drafts))
+        .options(
+            selectinload(Case.diagnosis),
+            selectinload(Case.drafts),
+            selectinload(Case.audit_events),
+            selectinload(Case.outcome),
+        )
         .where(Case.id == case_id)
     )
     # Scope to tenant if user has a tenant_id (non-ops users)
@@ -95,8 +118,35 @@ async def get_case(
             model_version=diag.model_version or "",
         )
 
+    practice = await session.get(Practice, case.tenant_id) if case.tenant_id else None
+    timeline = [
+        TimelineEvent(timestamp=e.timestamp, actor=_actor_label(e.actor), action=e.action)
+        for e in sorted(case.audit_events, key=lambda e: (e.timestamp, e.id))
+    ]
+    out = case.outcome
+    outcome = (
+        OutcomeInfo(
+            result=out.result,
+            amount_recovered=float(out.amount_recovered or 0),
+            paid_date=out.paid_date,
+            verified=out.verified,
+            billable_amount=float(out.billable_amount) if out.billable_amount is not None else None,
+        )
+        if out
+        else None
+    )
+
     return CaseDetail(
         id=case.id,
+        practice_name=practice.name if practice else None,
+        patient_ref=case.patient_ref,
+        dos=case.dos.date() if case.dos else None,
+        claim_number=case.claim_number,
+        carc_description=CARC_DESCRIPTIONS.get(case.carc or ""),
+        modifier=case.modifier,
+        updated_at=case.updated_at,
+        timeline=timeline,
+        outcome=outcome,
         payer=case.payer or "",
         cpt=case.cpt_hcpcs or "",
         billed_amt=float(case.billed_amt or 0),

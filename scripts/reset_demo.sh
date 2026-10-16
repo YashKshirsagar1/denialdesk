@@ -22,7 +22,4 @@ echo "[reset] Seeding demo data..."
 DATABASE_URL="${DATABASE_URL}" python scripts/seed_demo.py
 
 echo ""
-echo "[reset] Done. Start the app:"
-echo "  uvicorn denialdesk.api.main:app --reload &"
-echo "  cd frontend && npm run dev"
-echo "Then open: http://localhost:5173"
+echo "[reset] Done. Start the app:  make run   (then open http://localhost:8000)"

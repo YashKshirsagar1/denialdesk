@@ -200,3 +200,7 @@ Claude Code can't do these. They are founder tasks, and the app must not be poin
 
 Pitch deck (business context, market data, root questions, risks, exit thesis):
 https://claude.ai/code/artifact/c0614e15-31c8-4a4f-a72e-47b1f0a12579
+
+## 13. Standalone web app (current state)
+
+DenialDesk now runs as one standalone app (`make run`, http://localhost:8000): FastAPI serves the React UI plus the API. Login is built-in email + password (argon2id, lockout after 5 failures, 30-min idle sign-out) in `denialdesk/api/routers/auth.py`, kept behind the JWT layer so a managed IdP can replace it. **It has no MFA — still required before real PHI (see 12.3).** Self-signup creates a clinic locked until an ops admin activates it (12.7). See DEMO.md.

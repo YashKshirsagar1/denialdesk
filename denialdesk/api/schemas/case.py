@@ -55,11 +55,33 @@ class CaseSummary(BaseModel):
     root_cause: str | None
     created_at: datetime
     practice_name: str | None = None
+    patient_ref: str | None = None
 
     model_config = {"from_attributes": True}
 
 
+class TimelineEvent(BaseModel):
+    timestamp: datetime
+    actor: str  # "DenialDesk AI" | "DenialDesk team" | "Clinic" — never a person's email
+    action: str
+
+
+class OutcomeInfo(BaseModel):
+    result: str | None
+    amount_recovered: float
+    paid_date: datetime | None
+    verified: bool
+    billable_amount: float | None
+
+
 class CaseDetail(CaseSummary):
+    dos: date | None = None
+    claim_number: str | None = None
+    carc_description: str | None = None
+    modifier: str | None = None
+    updated_at: datetime | None = None
+    timeline: list[TimelineEvent] = []
+    outcome: OutcomeInfo | None = None
     icd10: list[str]
     allowed_amt: float
     rarc: str
@@ -92,6 +114,8 @@ class ClinicCaseSummary(BaseModel):
     winnability_score: float | None
     root_cause: str | None
     updated_at: datetime
+    practice_name: str | None = None
+    filing_deadline: date | None = None
 
     model_config = {"from_attributes": True}
 

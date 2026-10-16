@@ -135,7 +135,7 @@ class DiagnosisAgent:
             result = await self.llm.complete_json(
                 messages=[LLMMessage(role="user", content=user_msg)],
                 system=system,
-                max_tokens=512,
+                max_tokens=800,
             )
 
             llm_root_cause_str = result.get("root_cause", "")

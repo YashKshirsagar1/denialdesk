@@ -1,30 +1,45 @@
-export function formatCaseStatus(state: string, payer?: string, updatedAt?: string): string {
-  const date = updatedAt
-    ? new Date(updatedAt).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
-    : ''
-  const payerName = payer || 'payer'
-  const map: Record<string, string> = {
-    ingested: 'Received — analyzing claim',
-    diagnosed: 'Review in progress',
-    declined: 'Declined — not pursuing appeal',
-    approved: 'Approved for appeal',
-    drafted: 'Appeal draft in progress',
-    awaiting_human_review: 'Appeal under internal review',
-    submitted: date
-      ? `Appeal submitted to ${payerName} on ${date}`
-      : `Appeal submitted to ${payerName}`,
-    pending_payer: `Waiting for response from ${payerName}`,
-    paid: 'Paid',
-    re_denied: 'Re-denied — escalating',
-    escalated: 'Escalated to second-level appeal',
-    closed: 'Closed',
-  }
-  return map[state] ?? state
+export type Tone = 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'gray'
+
+interface StatusMeta {
+  label: string
+  tone: Tone
+  /** Plain-English line for clinics. */
+  detail: (payer: string) => string
+  group: 'analyzing' | 'review' | 'submitted' | 'paid' | 'declined' | 'denied'
 }
 
+const META: Record<string, StatusMeta> = {
+  ingested: { label: 'Analyzing', tone: 'gray', group: 'analyzing', detail: () => 'Received — our AI is analyzing this denial' },
+  diagnosed: { label: 'Analyzing', tone: 'gray', group: 'analyzing', detail: () => 'Denial analysis in progress' },
+  approved: { label: 'Drafting', tone: 'blue', group: 'review', detail: () => 'Approved for appeal — drafting the letter' },
+  drafted: { label: 'Drafting', tone: 'blue', group: 'review', detail: () => 'Appeal letter drafted' },
+  awaiting_human_review: { label: 'In review', tone: 'amber', group: 'review', detail: () => 'Appeal letter ready — with our team for review' },
+  submitted: { label: 'Submitted', tone: 'violet', group: 'submitted', detail: (p) => `Appeal submitted to ${p}` },
+  pending_payer: { label: 'Pending payer', tone: 'violet', group: 'submitted', detail: (p) => `Waiting for a response from ${p}` },
+  escalated: { label: 'Escalated', tone: 'violet', group: 'submitted', detail: () => 'Escalated to a second-level appeal' },
+  paid: { label: 'Paid', tone: 'green', group: 'paid', detail: () => 'Recovered — payment received' },
+  declined: { label: 'Not appealable', tone: 'red', group: 'declined', detail: () => 'We reviewed this and don’t recommend an appeal' },
+  re_denied: { label: 'Re-denied', tone: 'red', group: 'denied', detail: (p) => `${p} upheld the denial` },
+  closed: { label: 'Closed', tone: 'gray', group: 'denied', detail: () => 'Closed' },
+}
+
+export function statusMeta(state: string): StatusMeta {
+  return META[state] ?? { label: state, tone: 'gray', group: 'analyzing', detail: () => state }
+}
+
+export const FILTER_GROUPS: { key: string; label: string; match: (state: string) => boolean }[] = [
+  { key: 'all', label: 'All', match: () => true },
+  { key: 'review', label: 'In review', match: (s) => statusMeta(s).group === 'review' },
+  { key: 'submitted', label: 'Submitted', match: (s) => statusMeta(s).group === 'submitted' },
+  { key: 'paid', label: 'Paid', match: (s) => s === 'paid' },
+  { key: 'declined', label: 'Not appealable', match: (s) => s === 'declined' },
+]
+
+// Kept for older call sites.
+export function formatCaseStatus(state: string, payer?: string): string {
+  return statusMeta(state).detail(payer || 'payer')
+}
 export function statusColor(state: string): string {
-  if (['paid'].includes(state)) return '#15803d'        // green-700
-  if (['declined', 'closed', 're_denied'].includes(state)) return '#dc2626'  // red-600
-  if (['submitted', 'pending_payer', 'escalated'].includes(state)) return '#2563eb'  // blue-600
-  return '#6b7280'  // gray-600
+  const t = statusMeta(state).tone
+  return { green: '#137a3f', red: '#b42323', violet: '#5b3fc4', amber: '#9a5b00', blue: '#1664c0', gray: '#4b586a' }[t]
 }

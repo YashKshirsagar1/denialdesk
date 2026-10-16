@@ -43,7 +43,28 @@ export interface DeadlineItem {
   urgency: 'overdue' | 'critical' | 'warning' | 'upcoming' | 'ok';
 }
 
+export interface TimelineEvent {
+  timestamp: string;
+  actor: string;
+  action: string;
+}
+
+export interface OutcomeInfo {
+  result: string | null;
+  amount_recovered: number;
+  paid_date: string | null;
+  verified: boolean;
+  billable_amount: number | null;
+}
+
 export interface CaseDetail extends CaseSummary {
+  dos: string | null;
+  claim_number: string | null;
+  carc_description: string | null;
+  modifier: string | null;
+  updated_at: string | null;
+  timeline: TimelineEvent[];
+  outcome: OutcomeInfo | null;
   icd10: string[];
   allowed_amt: number;
   rarc: string;
@@ -141,6 +162,8 @@ export interface ClinicCaseSummary {
   winnability_score: number | null;
   root_cause: string | null;
   updated_at: string;
+  practice_name: string | null;
+  filing_deadline: string | null;
 }
 
 export interface DocumentRequest {
@@ -223,4 +246,59 @@ export interface PracticeOut {
   npi: string | null;
   specialties: string[] | null;
   payers_billed: string[] | null;
+}
+
+export type Role = 'clinic_admin' | 'clinic_staff' | 'reviewer' | 'ops_admin';
+
+export interface SessionUser {
+  id: number;
+  email: string;
+  full_name: string;
+  role: Role;
+  tenant_id: number | null;
+  practice_name: string | null;
+  must_change_password: boolean;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  user: SessionUser;
+}
+
+export interface BatchSummary {
+  id: number;
+  practice_id: number;
+  practice_name: string | null;
+  filename: string | null;
+  uploaded_at: string;
+  total: number;
+  analyzing: number;
+  declined: number;
+  in_progress: number;
+  paid: number;
+  done: boolean;
+}
+
+export interface UploadResult {
+  batch_id: number;
+  practice_id: number;
+  case_count: number;
+  errors: string[];
+}
+
+export interface TeamMember {
+  id: number;
+  email: string;
+  full_name: string;
+  role: Role;
+  tenant_id: number | null;
+  practice_name: string | null;
+  is_active: boolean;
+  last_login_at: string | null;
+}
+
+export interface DemoAccounts {
+  password: string;
+  accounts: { email: string; full_name: string; role: Role }[];
 }

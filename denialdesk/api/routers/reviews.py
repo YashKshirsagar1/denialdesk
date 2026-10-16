@@ -21,8 +21,9 @@ async def review_case(
     case_id: int,
     body: ReviewRequest,
     session: AsyncSession = Depends(get_session),
-    _user: UserClaims = Depends(_review_roles),
+    user: UserClaims = Depends(_review_roles),
 ):
+    reviewer = user.name or user.email
     stmt = (
         select(Case)
         .options(selectinload(Case.drafts))
@@ -48,14 +49,14 @@ async def review_case(
             review = Review(
                 draft_id=latest_draft.id,
                 tenant_id=case.tenant_id,
-                reviewer=body.reviewer,
+                reviewer=reviewer,
                 decision="approved",
                 edits_diff=None,
                 timestamp=datetime.now(timezone.utc),
             )
             session.add(review)
 
-        event = case.transition(CaseState.submitted, actor=body.reviewer, action_note="review:approved")
+        event = case.transition(CaseState.submitted, actor=reviewer, action_note="review:approved")
         session.add(event)
         await session.flush()
         return ReviewResponse(case_id=case_id, new_state="submitted", draft_id=new_draft_id, message="Appeal approved and submitted.")
@@ -92,14 +93,14 @@ async def review_case(
         review = Review(
             draft_id=new_draft.id,
             tenant_id=case.tenant_id,
-            reviewer=body.reviewer,
+            reviewer=reviewer,
             decision="edited",
             edits_diff=edits_diff,
             timestamp=datetime.now(timezone.utc),
         )
         session.add(review)
 
-        event = case.transition(CaseState.submitted, actor=body.reviewer, action_note="review:edited")
+        event = case.transition(CaseState.submitted, actor=reviewer, action_note="review:edited")
         session.add(event)
         await session.flush()
         return ReviewResponse(case_id=case_id, new_state="submitted", draft_id=new_draft.id, message="Draft edited and submitted.")
@@ -112,14 +113,14 @@ async def review_case(
             review = Review(
                 draft_id=latest_draft.id,
                 tenant_id=case.tenant_id,
-                reviewer=body.reviewer,
+                reviewer=reviewer,
                 decision="rejected",
                 edits_diff=None,
                 timestamp=datetime.now(timezone.utc),
             )
             session.add(review)
 
-        event = case.transition(CaseState.drafted, actor=body.reviewer, action_note="review:rejected")
+        event = case.transition(CaseState.drafted, actor=reviewer, action_note="review:rejected")
         session.add(event)
         await session.flush()
         return ReviewResponse(case_id=case_id, new_state="drafted", draft_id=new_draft_id, message="Draft rejected, returned for redrafting.")

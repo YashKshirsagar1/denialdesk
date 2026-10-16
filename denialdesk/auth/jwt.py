@@ -25,12 +25,18 @@ def verify_token(token: str) -> UserClaims:
             # Prod: Auth0 RS256 verification. Fetch JWKS from auth0_domain and verify RS256.
             raise NotImplementedError("Prod Auth0 JWT verification not yet wired")
 
-        return UserClaims(
+        claims = UserClaims(
             user_id=payload.get("sub", ""),
             email=payload.get("email", ""),
             tenant_id=payload.get("tenant_id"),
             role=Role(payload.get("role", "clinic_staff")),
+            name=payload.get("name", ""),
         )
+        # A clinic token with no tenant would be treated as cross-tenant by the
+        # tenant-scoping code. Never accept one.
+        if claims.role in (Role.clinic_admin, Role.clinic_staff) and claims.tenant_id is None:
+            raise HTTPException(status_code=401, detail="Malformed token claims: clinic role requires tenant_id")
+        return claims
     except JWTError as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
     except (KeyError, ValueError) as e:
@@ -42,14 +48,16 @@ def create_dev_token(
     email: str,
     tenant_id: int | None,
     role: Role,
+    name: str = "",
 ) -> str:
-    """Create a signed HS256 dev token. Only called from the dev-token endpoint."""
+    """Create a signed HS256 access token (dev-mode signer; swapped for the IdP in prod)."""
     payload = {
         "sub": user_id,
         "email": email,
         "tenant_id": tenant_id,
         "role": role.value,
+        "name": name,
         "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(hours=8),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=settings.access_token_ttl_hours),
     }
     return jwt.encode(payload, settings.dev_jwt_secret, algorithm="HS256")

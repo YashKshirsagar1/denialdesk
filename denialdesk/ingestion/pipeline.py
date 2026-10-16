@@ -1,10 +1,12 @@
+import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from denialdesk.llm.base import LLMProvider
 from denialdesk.models.case import AuditEvent, Batch, Case, CaseState, Practice
+from denialdesk.templates.payer_templates import get_payer_info
 from .base import ClaimRecord, IngestionResult, IngestorError
 from .csv_ingestor import CsvIngestor
 from .x12_835_ingestor import X12835Ingestor
@@ -46,6 +48,11 @@ class IngestionPipeline:
         await self._session.flush()
 
         for record in records:
+            denial_dt = datetime(
+                record.denial_date.year, record.denial_date.month, record.denial_date.day, tzinfo=timezone.utc
+            )
+            # Appeal window comes from the payer's rules; deadlines are first-class data.
+            appeal_days = int(get_payer_info(record.payer).get("deadline_days", 180))
             case = Case(
                 batch_id=batch.id,
                 tenant_id=practice_id,
@@ -58,12 +65,14 @@ class IngestionPipeline:
                 allowed_amt=float(record.allowed_amt),
                 carc=record.carc,
                 rarc=record.rarc,
-                denial_date=datetime(
-                    record.denial_date.year,
-                    record.denial_date.month,
-                    record.denial_date.day,
-                    tzinfo=timezone.utc,
-                ),
+                denial_date=denial_dt,
+                filing_deadline=denial_dt + timedelta(days=appeal_days),
+                claim_number=record.claim_number or None,
+                modifier=record.modifier or None,
+                rendering_provider_npi=record.rendering_provider_npi or None,
+                billing_provider_tin=record.billing_provider_tin or None,
+                clinical_notes=record.clinical_notes or None,
+                carc_codes=json.dumps(record.carc_codes) if record.carc_codes else None,
                 state=CaseState.ingested,
             )
             self._session.add(case)

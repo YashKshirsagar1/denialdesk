@@ -95,6 +95,26 @@ class Practice(TimestampMixin, Base):
     statements: Mapped[list["Statement"]] = relationship("Statement", back_populates="practice")
 
 
+class User(TimestampMixin, Base):
+    """A person who can sign in. Clinic roles are bound to exactly one practice (tenant_id).
+
+    password_hash is an argon2id hash — plaintext is never stored or logged.
+    """
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    full_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    role: Mapped[str] = mapped_column(String(30), nullable=False)
+    tenant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("practices.id"), nullable=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    failed_logins: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class PayerPortalAccess(Base):
     """Records which payer portals our staff have delegated access to.
 

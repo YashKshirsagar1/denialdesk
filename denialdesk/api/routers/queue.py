@@ -87,6 +87,7 @@ async def list_queue_cases(
                 root_cause=diag.root_cause if diag else None,
                 created_at=case.created_at,
                 practice_name=practice.name if practice else None,
+                patient_ref=case.patient_ref,
             )
         )
     return summaries

@@ -243,7 +243,7 @@ class DraftingAgent:
             result_dict = await self.llm.complete_json(
                 messages=[LLMMessage(role="user", content=user_msg)],
                 system=system,
-                max_tokens=800,
+                max_tokens=1500,  # 800 truncated the JSON mid-string and silently triggered the generic fallback
             )
             content = json.dumps(result_dict)
         except Exception as exc:

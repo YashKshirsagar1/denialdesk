@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     auth0_domain: str = ""
     auth0_audience: str = ""
 
+    # Self-serve signup creates a practice + clinic_admin. The practice stays locked
+    # (no uploads) until an ops admin marks the BAA + service agreement signed.
+    allow_signup: bool = True
+    access_token_ttl_hours: int = 8
+
+    # Built frontend (vite build output). Served by the API when present.
+    frontend_dist: str = "frontend/dist"
+
     # CORS — restrict in production. Comma-separated list of allowed origins.
     # Dev default: localhost only. Prod: set to the actual frontend domain.
     cors_allowed_origins: str = "http://localhost:5173,http://localhost:3000"

@@ -15,6 +15,7 @@ class UserClaims:
     email: str
     tenant_id: int | None  # None for ops_admin (cross-tenant access)
     role: Role
+    name: str = ""
 
     @property
     def is_ops(self) -> bool:

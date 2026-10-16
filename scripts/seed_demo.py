@@ -17,8 +17,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from denialdesk.auth.jwt import create_dev_token
 from denialdesk.auth.models import Role
+from denialdesk.auth.demo import DEMO_PASSWORD, DEMO_USERS
+from denialdesk.auth.passwords import hash_password
+from denialdesk.config import settings
 from denialdesk.models.case import (
     AuditEvent,
     Base,
@@ -35,8 +37,10 @@ from denialdesk.models.case import (
     Review,
     Statement,
     StatementStatus,
+    User,
     VerificationMethod,
 )
+
 
 DB_PATH = "data/dev.db"
 
@@ -419,27 +423,23 @@ def seed(db_path: str) -> None:
             sent_at=now - timedelta(days=5),
         )
         session.add(statement)
+
+        for email, full_name, role, is_clinic in DEMO_USERS:
+            session.add(User(
+                email=email,
+                password_hash=hash_password(DEMO_PASSWORD),
+                full_name=full_name,
+                role=role.value,
+                tenant_id=practice.id if is_clinic else None,
+            ))
         session.commit()
 
         # Capture IDs before the session closes (objects become detached after)
         practice_id = practice.id
 
     # ------------------------------------------------------------------
-    # Summary + tokens
+    # Summary
     # ------------------------------------------------------------------
-    clinic_token = create_dev_token(
-        user_id="demo-clinic-admin",
-        email="billing@lakesidefp.com",
-        tenant_id=practice_id,
-        role=Role.clinic_admin,
-    )
-    ops_token = create_dev_token(
-        user_id="demo-ops-admin",
-        email="ops@denialdesk.local",
-        tenant_id=None,
-        role=Role.ops_admin,
-    )
-
     declined_refs = [c[0] for c in _DEMO_CASES if c[8]]
     winnable_refs = [c[0] for c in _DEMO_CASES if not c[8] and c[0] != "PT-LAK-001"]
 
@@ -450,19 +450,17 @@ def seed(db_path: str) -> None:
     print(f"  Awaiting review ({len(winnable_refs)}) : {', '.join(winnable_refs)}")
     print(f"  Paid (1)         : PT-LAK-001 ($185.00 recovered)")
     print()
-    print("Dev tokens (valid 8 hours) — paste these into the login form:")
-    print(f"  Clinic admin : {clinic_token}")
-    print(f"  Ops admin    : {ops_token}")
+    print("Demo accounts (all use the same password):")
+    print(f"  Password       : {DEMO_PASSWORD}")
+    for email, full_name, role, _ in DEMO_USERS:
+        print(f"  {role.value:<13}: {email}  ({full_name})")
     print()
-    print("Run the app:")
-    print("  uvicorn denialdesk.api.main:app --reload &")
-    print("  cd frontend && npm run dev")
-    print("Then open: http://localhost:5173")
-    print()
-    print("Or use: make demo  (resets DB + seeds + prints tokens)")
+    print("Run the app:  make run   then open http://localhost:8000")
 
 
 def main() -> None:
+    if not settings.dev_mode:
+        raise SystemExit("Refusing to seed demo accounts: DEV_MODE is off.")
     Path("data").mkdir(exist_ok=True)
 
     # Remove existing DB so seed is idempotent (reset_demo.sh also does this)

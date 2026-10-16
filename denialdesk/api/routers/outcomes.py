@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from denialdesk.api.deps import get_session, require_role
+from denialdesk.api.deps import get_session, require_auth, require_role
 from denialdesk.api.schemas.outcome import OutcomeRequest, OutcomeResponse, OutcomeSummary
 from denialdesk.auth.models import Role, UserClaims
 from denialdesk.billing.fees import calculate_fee
@@ -54,7 +54,11 @@ async def record_outcome(
 async def get_outcome(
     case_id: int,
     session: AsyncSession = Depends(get_session),
+    user: UserClaims = Depends(require_auth),
 ):
+    case = await session.get(Case, case_id)
+    if case is None or (not user.is_ops and user.role != Role.reviewer and case.tenant_id != user.tenant_id):
+        raise HTTPException(status_code=404, detail="No outcome recorded")
     repo = CaseRepository(session)
     outcome = await repo.get_outcome(case_id)
     if not outcome:
