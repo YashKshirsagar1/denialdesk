@@ -45,7 +45,11 @@ class AnthropicProvider(LLMProvider):
     ) -> dict:
         system_with_json = (system or "") + _JSON_SUFFIX
         result = await self.complete(messages, system=system_with_json, max_tokens=max_tokens)
+        text = result.content.strip()
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            text = text[start : end + 1]
         try:
-            return json.loads(result.content)
+            return json.loads(text)
         except json.JSONDecodeError as exc:
             raise LLMError(f"Model returned non-JSON: {result.content[:200]}") from exc

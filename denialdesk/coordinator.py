@@ -1,9 +1,10 @@
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from denialdesk.agents.diagnosis_agent import DiagnosisAgent
 from denialdesk.agents.drafting_agent import DraftingAgent
@@ -14,6 +15,7 @@ from denialdesk.repositories import CaseRepository
 logger = logging.getLogger(__name__)
 
 DECLINE_THRESHOLD = 0.20
+BATCH_CONCURRENCY = 5  # cases processed in parallel; each gets its own DB session
 
 
 @dataclass
@@ -42,6 +44,8 @@ class Coordinator:
         practice_name: str = "Unknown Practice",
     ) -> None:
         self._session = session
+        self._llm = llm_provider
+        self._practice_name = practice_name
         self._diagnosis_agent = DiagnosisAgent(llm_provider)
         self._drafting_agent = DraftingAgent(llm_provider, practice_name=practice_name)
         self._case_repo = CaseRepository(session)
@@ -96,6 +100,8 @@ class Coordinator:
             event = case.transition(CaseState.approved, actor="coordinator")
             self._session.add(event)
             await self._session.flush()
+            # Commit before the slow LLM drafting calls so we don't hold a DB write lock across them.
+            await self._session.commit()
 
             # 4. Draft all document types — save_draft handles the drafted transition
             draft_results = await self._drafting_agent.draft_all(case, diagnosis)
@@ -118,16 +124,30 @@ class Coordinator:
 
     async def process_batch(self, batch_id: int) -> BatchResult:
         """Process all ingested cases in a batch through the full pipeline."""
-        stmt = select(Case).where(
+        stmt = select(Case.id).where(
             Case.batch_id == batch_id,
             Case.state == CaseState.ingested,
         )
         result = await self._session.execute(stmt)
-        cases = list(result.scalars().all())
+        case_ids = list(result.scalars().all())
+        await self._session.commit()  # release this session's read lock before parallel writers start
+
+        factory = async_sessionmaker(bind=self._session.bind, expire_on_commit=False)
+        sem = asyncio.Semaphore(BATCH_CONCURRENCY)
+
+        async def run_one(case_id: int) -> ProcessResult:
+            async with sem, factory() as session:
+                case = await session.get(Case, case_id)
+                await session.commit()  # release the read lock; the diagnosis LLM call is slow
+                coordinator = Coordinator(session, self._llm, practice_name=self._practice_name)
+                pr = await coordinator.process_case(case)
+                await session.commit()  # commit per case so progress is visible
+                return pr
+
+        results = await asyncio.gather(*(run_one(cid) for cid in case_ids))
 
         batch_result = BatchResult(batch_id=batch_id)
-        for case in cases:
-            pr = await self.process_case(case)
+        for pr in results:
             if pr.error:
                 batch_result.errors.append({"case_id": pr.case_id, "error": pr.error})
             else:

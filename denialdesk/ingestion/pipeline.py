@@ -38,6 +38,7 @@ class IngestionPipeline:
 
         batch = Batch(
             practice_id=practice_id,
+            tenant_id=practice_id,
             uploaded_at=datetime.now(timezone.utc),
             source_files=filename,
         )
@@ -47,6 +48,7 @@ class IngestionPipeline:
         for record in records:
             case = Case(
                 batch_id=batch.id,
+                tenant_id=practice_id,
                 payer=record.payer,
                 patient_ref=record.patient_ref,
                 dos=datetime(record.dos.year, record.dos.month, record.dos.day, tzinfo=timezone.utc),
@@ -69,6 +71,7 @@ class IngestionPipeline:
 
             event = AuditEvent(
                 case_id=case.id,
+                tenant_id=practice_id,
                 actor="ingestion_pipeline",
                 action=f"ingested from {source_format}",
                 timestamp=datetime.now(timezone.utc),

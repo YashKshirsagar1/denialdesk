@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { authHeaders } from '../auth';
 
 interface Practice {
   id: number;
@@ -55,7 +56,7 @@ export function UploadForm() {
     form.append('practice_id', String(practiceId));
 
     try {
-      const resp = await fetch('/api/upload', { method: 'POST', body: form });
+      const resp = await fetch('/api/upload', { method: 'POST', body: form, headers: authHeaders() });
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
         throw new Error(body.detail || `Upload failed (${resp.status})`);
@@ -74,7 +75,7 @@ export function UploadForm() {
     setError(null);
     setProcessing(true);
     try {
-      const resp = await fetch(`/api/batches/${uploadResult.batch_id}/process`, { method: 'POST' });
+      const resp = await fetch(`/api/batches/${uploadResult.batch_id}/process`, { method: 'POST', headers: authHeaders() });
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
         throw new Error(body.detail || `Processing failed (${resp.status})`);
